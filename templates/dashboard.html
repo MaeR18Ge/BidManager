@@ -1,0 +1,523 @@
+{% extends "base.html" %}
+
+{% block title %}数据统计 - 六院体检业务管理系统{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h2><i class="fas fa-chart-bar me-2"></i>数据统计仪表板</h2>
+        <p class="text-muted">实时业务数据分析和统计报告</p>
+    </div>
+</div>
+
+<!-- 主要统计卡片 -->
+<div class="row mb-4">
+    <div class="col-md-2">
+        <div class="card stats-card bg-primary text-white">
+            <div class="card-body text-center">
+                <i class="fas fa-briefcase fa-2x mb-2"></i>
+                <h6 class="card-title">总业务数</h6>
+                <h3 class="card-text">{{ total_businesses }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card stats-card bg-success text-white">
+            <div class="card-body text-center">
+                <i class="fas fa-yen-sign fa-2x mb-2"></i>
+                <h6 class="card-title">总金额</h6>
+                <h3 class="card-text">¥{{ "%.1f"|format(total_amount/10000) }}万</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card stats-card bg-info text-white">
+            <div class="card-body text-center">
+                <i class="fas fa-trophy fa-2x mb-2"></i>
+                <h6 class="card-title">已中标金额</h6>
+                <h3 class="card-text">¥{{ "%.1f"|format(won_amount/10000) }}万</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card stats-card bg-warning text-white">
+            <div class="card-body text-center">
+                <i class="fas fa-users fa-2x mb-2"></i>
+                <h6 class="card-title">服务人数</h6>
+                <h3 class="card-text">{{ total_service_people }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card stats-card bg-secondary text-white">
+            <div class="card-body text-center">
+                <i class="fas fa-calendar-alt fa-2x mb-2"></i>
+                <h6 class="card-title">本月新增</h6>
+                <h3 class="card-text">{{ this_month_businesses }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card stats-card bg-danger text-white">
+            <div class="card-body text-center">
+                <i class="fas fa-clock fa-2x mb-2"></i>
+                <h6 class="card-title">即将到期</h6>
+                <h3 class="card-text">{{ upcoming_deadlines|length }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 状态分布图表 -->
+<div class="row mb-4">
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="fas fa-chart-pie me-2"></i>投标状态分布</h6>
+            </div>
+            <div class="card-body">
+                <canvas id="bidStatusChart" width="400" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="fas fa-chart-pie me-2"></i>收款情况分布</h6>
+            </div>
+            <div class="card-body">
+                <canvas id="paymentStatusChart" width="400" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 详细统计表格 -->
+<div class="row mb-4">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="fas fa-table me-2"></i>详细统计</h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>投标状态统计</h6>
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>状态</th>
+                                    <th>数量</th>
+                                    <th>占比</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for status, count in bid_status_stats %}
+                                <tr>
+                                    <td>
+                                        <span class="badge" style="background-color: {{ '#28a745' if status == '已中标' else '#ffc107' if status == '已投标' else '#17a2b8' if status == '已报名' else '#dc3545' if status == '未中标' else '#6c757d' if status == '未投标' else '#fd7e14' }}; color: white;">
+                                            {{ status }}
+                                        </span>
+                                    </td>
+                                    <td>{{ count }}</td>
+                                    <td>{{ "%.1f"|format(count / total_businesses * 100) if total_businesses > 0 else 0 }}%</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>收款情况统计</h6>
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>状态</th>
+                                    <th>数量</th>
+                                    <th>占比</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for status, count in payment_status_stats %}
+                                <tr>
+                                    <td>
+                                        <span class="badge" style="background-color: {{ '#28a745' if status == '已收款' else '#ffc107' if status == '延期收款' else '#dc3545' if status == '未收款' else '#6c757d' }}; color: white;">
+                                            {{ status }}
+                                        </span>
+                                    </td>
+                                    <td>{{ count }}</td>
+                                    <td>{{ "%.1f"|format(count / total_businesses * 100) if total_businesses > 0 else 0 }}%</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="fas fa-building me-2"></i>主要客户单位</h6>
+            </div>
+            <div class="card-body">
+                {% if customer_stats %}
+                    <div class="list-group list-group-flush">
+                        {% for customer, count in customer_stats %}
+                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-1">{{ customer }}</h6>
+                                <small class="text-muted">{{ count }}个业务</small>
+                            </div>
+                            <span class="badge bg-primary rounded-pill">{{ count }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="text-muted text-center py-3">暂无客户数据</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 时间趋势和最近业务 -->
+<div class="row mb-4">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="fas fa-chart-line me-2"></i>月度业务趋势</h6>
+            </div>
+            <div class="card-body">
+                <canvas id="trendChart" width="400" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="fas fa-list me-2"></i>最近业务</h6>
+            </div>
+            <div class="card-body">
+                {% if recent_businesses %}
+                    <div class="list-group list-group-flush">
+                        {% for business in recent_businesses %}
+                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-1">{{ business.name[:15] }}{% if business.name|length > 15 %}...{% endif %}</h6>
+                                <small class="text-muted">{{ business.customer[:10] }}{% if business.customer|length > 10 %}...{% endif %}</small>
+                            </div>
+                            <div class="text-end">
+                                <span class="badge bg-{{ 'success' if business.bid_status == '已中标' else 'warning' if business.bid_status == '已投标' else 'secondary' }}">
+                                    {{ business.bid_status }}
+                                </span>
+                                <br>
+                                <small class="text-muted">{{ business.updated_at.strftime('%m-%d') }}</small>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="text-muted text-center py-3">暂无最近业务</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 即将到期业务和状态变更统计 -->
+<div class="row mb-4">
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="fas fa-exclamation-triangle me-2"></i>即将到期业务</h6>
+            </div>
+            <div class="card-body">
+                {% if upcoming_deadlines %}
+                    <div class="list-group list-group-flush">
+                        {% for business in upcoming_deadlines %}
+                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-1">{{ business.name[:20] }}{% if business.name|length > 20 %}...{% endif %}</h6>
+                                <small class="text-muted">{{ business.customer[:15] }}{% if business.customer|length > 15 %}...{% endif %}</small>
+                            </div>
+                            <div class="text-end">
+                                <span class="badge bg-danger">{{ business.bid_time.strftime('%m-%d') }}</span>
+                                <br>
+                                <small class="text-muted">投标截止</small>
+                            </div>
+                        </div>
+                                {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="text-muted text-center py-3">暂无即将到期的业务</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="fas fa-history me-2"></i>最近状态变更</h6>
+            </div>
+            <div class="card-body">
+                {% if recent_changes %}
+                    <div class="list-group list-group-flush">
+                        {% for field_name, count in recent_changes %}
+                        {% set label_map = {'bid_status':'投标状态','document_status':'标书状态','priority':'优先级','payment_status':'收款情况','name':'业务名称','customer':'客户单位'} %}
+                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-1"><span class="badge bg-info history-badge">{{ label_map.get(field_name, field_name) }}</span></h6>
+                                <small class="text-muted">最近30天变更</small>
+                            </div>
+                            <span class="badge bg-info rounded-pill">{{ count }}</span>
+                        </div>
+                                {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="text-muted text-center py-3">暂无状态变更记录</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 优先级和标书状态统计 -->
+<div class="row mb-4">
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="fas fa-chart-bar me-2"></i>优先级分布</h6>
+            </div>
+            <div class="card-body">
+                <canvas id="priorityChart" width="400" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="fas fa-chart-bar me-2"></i>标书状态分布</h6>
+                </div>
+            <div class="card-body">
+                <canvas id="documentStatusChart" width="400" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// 投标状态分布饼图
+const bidStatusColorMap = {
+    '已中标': '#28a745',
+    '已投标': '#ffc107',
+    '已报名': '#17a2b8',
+    '未中标': '#dc3545',
+    '未投标': '#6c757d',
+    '未报名': '#fd7e14'
+};
+const bidStatusCtx = document.getElementById('bidStatusChart').getContext('2d');
+const bidStatusChart = new Chart(bidStatusCtx, {
+    type: 'doughnut',
+    data: {
+        labels: [
+            {% for status, count in bid_status_stats %}
+                '{{ status }}',
+            {% endfor %}
+        ],
+        datasets: [{
+            data: [
+                {% for status, count in bid_status_stats %}
+                    {{ count }},
+                {% endfor %}
+            ],
+            backgroundColor: [
+                {% for status, count in bid_status_stats %}
+                    bidStatusColorMap['{{ status }}'],
+                {% endfor %}
+            ]
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            legend: {
+                position: 'bottom'
+            }
+        }
+    }
+});
+
+// 收款情况分布饼图
+const paymentStatusColorMap = {
+    '已收款': '#28a745',
+    '延期收款': '#ffc107',
+    '未收款': '#dc3545',
+    '部分收款': '#6c757d'
+};
+const paymentStatusCtx = document.getElementById('paymentStatusChart').getContext('2d');
+const paymentStatusChart = new Chart(paymentStatusCtx, {
+    type: 'doughnut',
+    data: {
+        labels: [
+            {% for status, count in payment_status_stats %}
+                '{{ status }}',
+            {% endfor %}
+        ],
+        datasets: [{
+            data: [
+                {% for status, count in payment_status_stats %}
+                    {{ count }},
+                {% endfor %}
+            ],
+            backgroundColor: [
+                {% for status, count in payment_status_stats %}
+                    paymentStatusColorMap['{{ status }}'],
+                {% endfor %}
+            ]
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            legend: {
+                position: 'bottom'
+            }
+        }
+    }
+});
+
+// 优先级分布柱状图
+const priorityCtx = document.getElementById('priorityChart').getContext('2d');
+// 低=灰色，中=绿色，高=红色 的固定映射
+const priorityColorMap = { '低': '#6c757d', '中': '#28a745', '高': '#dc3545' };
+const priorityChart = new Chart(priorityCtx, {
+    type: 'bar',
+    data: {
+        labels: [
+            {% for priority, count in priority_stats %}
+                '{{ priority }}',
+            {% endfor %}
+        ],
+        datasets: [{
+            label: '业务数量',
+            data: [
+                {% for priority, count in priority_stats %}
+                    {{ count }},
+                {% endfor %}
+            ],
+            backgroundColor: [
+                {% for priority, count in priority_stats %}
+                    priorityColorMap['{{ priority }}'],
+                {% endfor %}
+            ]
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            legend: {
+                labels: {
+                    boxWidth: 0,
+                    boxHeight: 0
+                }
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true
+            }
+        }
+    }
+});
+
+// 标书状态分布柱状图
+const documentStatusCtx = document.getElementById('documentStatusChart').getContext('2d');
+// 未获取=灰色，已获取=绿色
+const documentStatusColorMap = { '未获取': '#6c757d', '已获取': '#28a745' };
+const documentStatusChart = new Chart(documentStatusCtx, {
+    type: 'bar',
+    data: {
+        labels: [
+            {% for status, count in document_status_stats %}
+                '{{ status }}',
+            {% endfor %}
+        ],
+        datasets: [{
+            label: '业务数量',
+            data: [
+                {% for status, count in document_status_stats %}
+                    {{ count }},
+                {% endfor %}
+            ],
+            backgroundColor: [
+                {% for status, count in document_status_stats %}
+                    documentStatusColorMap['{{ status }}'],
+                {% endfor %}
+            ]
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            legend: {
+                labels: {
+                    boxWidth: 0,
+                    boxHeight: 0
+                }
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true
+            }
+        }
+    }
+});
+
+// 月度趋势图
+const trendCtx = document.getElementById('trendChart').getContext('2d');
+const trendChart = new Chart(trendCtx, {
+    type: 'line',
+    data: {
+        labels: [
+            {% for month, count in monthly_stats %}
+                '{{ month }}',
+            {% endfor %}
+        ],
+        datasets: [{
+            label: '新增业务数',
+            data: [
+                {% for month, count in monthly_stats %}
+                    {{ count }},
+                {% endfor %}
+            ],
+            borderColor: '#007bff',
+            backgroundColor: 'rgba(0, 123, 255, 0.1)',
+            tension: 0.1
+        }, {
+            label: '新增中标数',
+            data: [
+                {% for month, count in monthly_stats %}
+                    {{ monthly_won_additions_map.get(month, 0) }},
+                {% endfor %}
+            ],
+            borderColor: '#ffc107',
+            backgroundColor: 'rgba(255, 193, 7, 0.1)',
+            tension: 0.1
+        }]
+    },
+    options: {
+        responsive: true,
+        scales: {
+            y: {
+                beginAtZero: true
+            }
+        }
+    }
+});
+</script>
+{% endblock %} 

@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}登录 - 六院体检业务管理系统{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-4">
+    <div class="card">
+      <div class="card-header text-center">
+        <h5 class="mb-0"><i class="fas fa-right-to-bracket me-2"></i>用户登录</h5>
+      </div>
+      <div class="card-body">
+        <form method="POST" action="{{ url_for('login') }}">
+          <div class="mb-3">
+            <label class="form-label">用户名</label>
+            <input type="text" name="username" class="form-control" placeholder="请输入用户名" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">密码</label>
+            <input type="password" name="password" class="form-control" placeholder="请输入密码" required>
+          </div>
+          <button type="submit" class="btn btn-primary w-100">登录</button>
+        </form>
+      </div>
+    </div>
+  </div>
+{% endblock %}

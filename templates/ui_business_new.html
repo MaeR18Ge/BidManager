@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>新增业务（新版）</title>
+	<script src="https://cdn.tailwindcss.com"></script>
+	<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+	<script>
+		tailwind.config = {
+			theme: {
+				extend: {
+					colors: {
+						primary: '#7c3aed',
+						secondary: '#4f46e5',
+						dark: { 100: '#374151', 200: '#1f2937', 300: '#111827', 400: '#0f172a', 500: '#030712' },
+						success: '#10b981', warning: '#f59e0b', danger: '#ef4444', pending: '#8b5cf6',
+						text: { primary: '#f3f4f6', secondary: '#9ca3af' }
+					},
+					fontFamily: { inter: ['Inter', 'system-ui', 'sans-serif'] }
+				}
+			}
+		}
+	</script>
+	<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+	<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/zh.min.js"></script>
+	<style type="text/tailwindcss">
+		@layer utilities {
+			.page-container { @apply max-w-[1200px] mx-auto w-full px-4 sm:px-5 md:px-6; }
+			.input-dk { @apply w-full h-[36px] px-3 rounded-md bg-[#101211] border border-dark-100 text-text-primary placeholder-text-secondary focus:outline-none focus:ring-1 focus:ring-primary; }
+			.textarea-dk { @apply w-full px-3 py-2 rounded-md bg-[#101211] border border-dark-100 text-text-primary placeholder-text-secondary focus:outline-none focus:ring-1 focus:ring-primary; }
+			.select-dk { @apply w-full h-[36px] px-3 rounded-md bg-[#101211] border border-dark-100 text-text-primary focus:outline-none focus:ring-1 focus:ring-primary; }
+			.label-dk { @apply block text-text-secondary mb-1; }
+			.section-h { @apply text-text-secondary text-[20px] leading-[20px] mb-4 flex items-center; }
+			.btn-ghost-dk { @apply h-[34px] px-3 rounded-md text-sm text-text-secondary bg-[#101211] border border-dark-100 hover:ring-1 hover:ring-primary inline-flex items-center; }
+			.btn-primary-dk { @apply h-[34px] px-4 rounded-md text-sm text-white bg-primary hover:bg-secondary inline-flex items-center; }
+			.font-yahei { font-family: 'Microsoft YaHei', '微软雅黑', system-ui, sans-serif; }
+		}
+		@layer base { body { @apply font-yahei; } }
+		html { font-size: 16px; -webkit-text-size-adjust: 100%; }
+		body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; }
+
+		/* 修复浏览器自动填充导致的白色背景 */
+		.input-dk:-webkit-autofill,
+		.input-dk:-webkit-autofill:hover,
+		.input-dk:-webkit-autofill:focus,
+		.textarea-dk:-webkit-autofill,
+		.select-dk:-webkit-autofill {
+			-webkit-text-fill-color: #f3f4f6;
+			transition: background-color 9999s ease-in-out 0s;
+			box-shadow: 0 0 0px 1000px #101211 inset;
+		}
+		.input-dk:-moz-autofill,
+		.textarea-dk:-moz-autofill,
+		.select-dk:-moz-autofill {
+			box-shadow: 0 0 0 1000px #101211 inset;
+			color: #f3f4f6;
+		}
+
+		/* 输入框/文本域占位符更暗（暗于标题文字） */
+		.input-dk::placeholder,
+		.textarea-dk::placeholder { color: #6b7280; opacity: 1; }
+
+		/* select 的“占位”更暗：当空值被选中时 */
+		.select-dk:has(option[value=""]:checked) { color: #6b7280; }
+		.select-dk option { background-color: #101211; color: #f3f4f6; }
+		.select-dk option[value=""] { color: #6b7280; }
+
+		/* 日期输入（使用自定义日历）：隐藏原生图标，暗色方案 */
+		input[type="date"] { color-scheme: dark; }
+		input[type="date"]::-webkit-calendar-picker-indicator { display: none; }
+		/* 通用：右侧日历按钮样式 */
+		.date-wrap { position: relative; }
+		.date-wrap .calendar-btn { position:absolute; right:10px; top:50%; transform:translateY(-50%); color:#9ca3af; cursor:pointer; }
+		.date-wrap .calendar-btn:hover { color:#f3f4f6; }
+		.flatpickr-calendar { z-index: 60; }
+	</style>
+</head>
+<body class="bg-[#101211] text-text-primary min-h-screen flex overflow-x-hidden">
+	<main class="flex-1 flex flex-col w-full">
+		<header class="h-16 bg-[#101211]">
+			<div class="page-container h-full bg-[#101211]">
+				<div class="w-full h-full flex items-center justify-between bg-[#080808] border-b border-x border-dark-200 rounded-b-lg overflow-visible">
+					<div class="flex items-center min-w-0 flex-1 pl-3 md:pl-5">
+						<svg class="mr-2 text-text-secondary w-[22px] h-[22px] sm:w-[26px] sm:h-[26px] relative top-[1px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+							<path d="M9 7V5h6v2"/>
+							<rect x="3" y="7" width="18" height="14" rx="2"/>
+							<path d="M3 13h18"/>
+						</svg>
+						<div class="flex items-baseline" style="margin-left:-3px;">
+							<span class="text-text-secondary text-[24px] leading-[24px] inline-block">新增业务</span>
+						</div>
+					</div>
+					<div class="flex items-center gap-2 pr-3 md:pr-5">
+						<a href="{{ url_for('ui_console') }}" class="btn-ghost-dk">返回</a>
+					</div>
+				</div>
+			</div>
+		</header>
+
+		<section class="page-container mt-4 mb-6">
+			<section class="bg-[#161616] rounded-lg p-4 border border-dark-200">
+				<form id="newBizForm" action="{{ url_for('new_business') }}" method="POST" class="space-y-6">
+					<!-- 基本信息 -->
+					<h3 class="section-h"><i class="bi bi-info-circle mr-2 text-[20px] leading-[20px] text-primary"></i>基本信息</h3>
+					<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+						<div>
+							<label class="label-dk" for="name">业务名称<span class="text-danger ml-1">*</span></label>
+							<input class="input-dk" id="name" name="name" type="text" required />
+						</div>
+						<div>
+							<label class="label-dk" for="customer">客户单位<span class="text-danger ml-1">*</span></label>
+							<input class="input-dk" id="customer" name="customer" type="text" required />
+						</div>
+					</div>
+
+					<!-- 联系人信息 -->
+					<h3 class="section-h"><i class="bi bi-people mr-2 text-[20px] leading-[20px] text-secondary"></i>联系人信息</h3>
+					<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+						<div>
+							<label class="label-dk" for="bid_contact_name">投标联系人</label>
+							<input class="input-dk" id="bid_contact_name" name="bid_contact_name" type="text" />
+						</div>
+						<div>
+							<label class="label-dk" for="bid_contact_phone">联系电话</label>
+							<input class="input-dk" id="bid_contact_phone" name="bid_contact_phone" type="tel" />
+						</div>
+						<div>
+							<label class="label-dk" for="customer_contact_name">客户联系人</label>
+							<input class="input-dk" id="customer_contact_name" name="customer_contact_name" type="text" />
+						</div>
+						<div>
+							<label class="label-dk" for="customer_contact_phone">联系电话</label>
+							<input class="input-dk" id="customer_contact_phone" name="customer_contact_phone" type="tel" />
+						</div>
+					</div>
+
+					<!-- 业务信息 -->
+					<h3 class="section-h"><i class="bi bi-briefcase mr-2 text-[20px] leading-[20px] text-warning"></i>业务信息</h3>
+					<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+						<div>
+							<label class="label-dk" for="bid_amount">招标金额</label>
+							<input class="input-dk" id="bid_amount" name="bid_amount" type="number" step="0.01" placeholder="请输入招标金额" />
+						</div>
+						<div>
+							<label class="label-dk" for="service_people">服务人数</label>
+							<input class="input-dk" id="service_people" name="service_people" type="number" />
+						</div>
+						<div class="md:col-span-2">
+							<label class="label-dk" for="document_url">标书获取地址</label>
+							<input class="input-dk" id="document_url" name="document_url" type="url" placeholder="请输入标书下载或查看的网址" />
+						</div>
+						<div class="md:col-span-2">
+							<label class="label-dk" for="service_content">服务内容</label>
+							<textarea class="textarea-dk" id="service_content" name="service_content" rows="3" placeholder="请详细描述服务内容..."></textarea>
+						</div>
+						<div class="md:col-span-2">
+							<label class="label-dk" for="previous_suppliers">过往服务商</label>
+							<input class="input-dk" id="previous_suppliers" name="previous_suppliers" type="text" placeholder="请输入过往服务商名称，可用逗号分隔多个" />
+						</div>
+					</div>
+
+					<!-- 时间信息 -->
+					<h3 class="section-h"><i class="bi bi-calendar-event mr-2 text-[20px] leading-[20px] text-success"></i>时间信息</h3>
+					<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+						<div>
+							<label class="label-dk" for="registration_time">报名时间</label>
+							<div class="date-wrap">
+								<input class="input-dk" id="registration_time" name="registration_time" type="date" placeholder="yyyy/mm/dd" />
+								<i class="bi bi-calendar-event calendar-btn" data-target="registration_time"></i>
+							</div>
+						</div>
+						<div>
+							<label class="label-dk" for="bid_time">投标时间</label>
+							<div class="date-wrap">
+								<input class="input-dk" id="bid_time" name="bid_time" type="date" placeholder="yyyy/mm/dd" />
+								<i class="bi bi-calendar-event calendar-btn" data-target="bid_time"></i>
+							</div>
+						</div>
+					</div>
+
+					<!-- 状态信息 -->
+					<h3 class="section-h"><i class="bi bi-flag mr-2 text-[20px] leading-[20px] text-pending"></i>状态信息</h3>
+					<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+						<div>
+							<label class="label-dk" for="document_status">标书状态</label>
+							<select class="select-dk" id="document_status" name="document_status">
+								<option value="未获取">未获取</option>
+								<option value="已获取">已获取</option>
+							</select>
+						</div>
+						<div>
+							<label class="label-dk" for="bid_status">投标状态</label>
+							<select class="select-dk" id="bid_status" name="bid_status">
+								<option value="未报名">未报名</option>
+								<option value="已报名">已报名</option>
+								<option value="未投标">未投标</option>
+								<option value="已投标">已投标</option>
+								<option value="未中标">未中标</option>
+								<option value="已中标">已中标</option>
+							</select>
+						</div>
+						<div>
+							<label class="label-dk" for="priority">优先级</label>
+							<select class="select-dk" id="priority" name="priority">
+								<option value="低">低</option>
+								<option value="中">中</option>
+								<option value="高">高</option>
+							</select>
+						</div>
+						<div>
+							<label class="label-dk" for="payment_status">收款情况</label>
+							<select class="select-dk" id="payment_status" name="payment_status">
+								<option value="" selected>请选择收款情况</option>
+								<option value="未收款">未收款</option>
+								<option value="部分收款">部分收款</option>
+								<option value="已收款">已收款</option>
+								<option value="延期收款">延期收款</option>
+							</select>
+						</div>
+					</div>
+
+					<!-- 备注信息 -->
+					<h3 class="section-h"><i class="bi bi-journal-text mr-2 text-[20px] leading-[20px] text-danger"></i>备注信息</h3>
+					<div>
+						<label class="label-dk" for="notes">备注</label>
+						<textarea class="textarea-dk" id="notes" name="notes" rows="3" placeholder="添加备注信息..."></textarea>
+					</div>
+
+					<div class="border-t border-dark-200 pt-4 mt-2 flex items-center justify-end gap-2">
+						<a href="{{ url_for('ui_console') }}" class="btn-ghost-dk">返回</a>
+						<button type="submit" class="btn-primary-dk">保存</button>
+					</div>
+				</form>
+			</section>
+		</section>
+		</main>
+
+	<script>
+		// 初始化 flatpickr 并把弹出层固定在输入框右侧
+		document.addEventListener('DOMContentLoaded', function(){
+			const opts = {
+				enableTime: false,
+				dateFormat: 'Y-m-d',
+				locale: flatpickr.l10ns.zh,
+				position: 'auto right'
+			};
+			const reg = document.getElementById('registration_time');
+			const bid = document.getElementById('bid_time');
+			if(window.flatpickr){
+				if(reg) flatpickr(reg, opts);
+				if(bid) flatpickr(bid, opts);
+			}
+			// 图标点击聚焦输入框，触发右侧弹出
+			document.querySelectorAll('.calendar-btn').forEach(function(icon){
+				icon.addEventListener('click', function(){
+					const id = icon.getAttribute('data-target');
+					const input = document.getElementById(id);
+					if(input){ input.focus(); input.click(); }
+				});
+			});
+		});
+	</script>
+</body>
+</html>
+

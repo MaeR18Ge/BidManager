@@ -1,0 +1,1603 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>投标管理系统</title>
+    <link rel="icon" href="#" id="dynamic-favicon">
+    <script>
+      // 使用导航标题左侧的 SVG 作为 favicon（简单地用相同路径绘制成 data URL）
+      document.addEventListener('DOMContentLoaded', function(){
+        const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="%23a78bfa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 7V5h6v2"/><rect x="3" y="7" width="18" height="14" rx="2"/><path d="M3 13h18"/></svg>';
+        const dataUrl = 'data:image/svg+xml;utf8,' + svg;
+        const link = document.getElementById('dynamic-favicon');
+        if(link) link.href = dataUrl;
+      });
+    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <link href="node_modules/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#7c3aed', // 主紫色
+                        secondary: '#4f46e5',
+                        dark: {
+                            100: '#374151',
+                            200: '#1f2937',
+                            300: '#111827',
+                            400: '#0f172a',
+                            500: '#030712'
+                        },
+                        success: '#10b981',
+                        warning: '#f59e0b',
+                        danger: '#ef4444',
+                        pending: '#8b5cf6',
+                        text: {
+                            primary: '#f3f4f6',
+                            secondary: '#9ca3af'
+                        }
+                    },
+                    fontFamily: {
+                        inter: ['Inter', 'system-ui', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+            .scrollbar-thin {
+                scrollbar-width: thin;
+            }
+            .scrollbar-thumb-rounded {
+                scrollbar-color: rgba(156, 163, 175, 0.5) transparent;
+            }
+            .hover-highlight {
+                @apply transition-all duration-200 hover:bg-dark-200 rounded-md;
+            }
+            .stat-card {
+                @apply bg-[#242424] rounded-lg p-4 border border-[#484848] transition-all duration-300 hover:border-primary/30 hover:ring-1 hover:ring-primary transform hover:-translate-y-1 hover:shadow-lg hover:shadow-black/30;
+            }
+            .card-active { /* 不再持久使用，改为短暂闪烁 */
+                @apply ring-2 ring-primary;
+            }
+            .card-flash {
+                @apply ring-2 ring-primary -translate-y-1 shadow-lg shadow-black/30;
+            }
+            .card-jiggle {
+                @apply -translate-y-1 ring-2 ring-primary shadow-lg shadow-black/30;
+            }
+
+            /* 业务列表选中描边样式（通过 JS 切换） */
+            .bizlist-active {
+                @apply ring-1 ring-primary;
+            }
+            .table-row-hover {
+                @apply hover:bg-[#2c2c2c] transition-colors duration-200;
+                user-select: none;
+            }
+            .row-selected {
+                @apply bg-[#080808];
+            }
+            .font-yahei {
+                font-family: 'Microsoft YaHei', '微软雅黑', system-ui, sans-serif;
+            }
+            @layer base {
+                body { @apply font-yahei; }
+            }
+            .status-badge {
+                @apply inline-flex items-center justify-center rounded whitespace-nowrap;
+                min-width: 72px;
+                height: 20px;
+                padding: 0 8px;
+                font-size: 12px;
+            }
+            .chip {
+                @apply inline-flex items-center justify-center rounded border border-dark-100 whitespace-nowrap text-xs px-2 py-0.5;
+            }
+            .time-chip {
+                min-width: 54px; /* 缩短剩余天数标签 */
+                padding-left: 6px;
+                padding-right: 6px;
+                text-align: center;
+            }
+            .dropdown-panel {
+                @apply z-50 bg-[#242424] border border-dark-100 rounded shadow-lg transform transition ease-out duration-150 box-border;
+            }
+            .dropdown-item {
+                @apply px-3 py-1.5 hover:bg-dark-200 cursor-pointer text-xs whitespace-nowrap flex items-center justify-center text-center;
+            }
+            .page-container {
+                @apply max-w-[1440px] mx-auto w-full px-4 sm:px-5 md:px-6;
+            }
+        }
+        /* 提升按下态优先级，覆盖 hover 背景 */
+        /* 移除行按下的呼吸效果（无额外覆盖） */
+    </style>
+    <style>
+        /* 统一浏览器的 rem 基线与字体渲染，避免 Edge/Chrome 视觉缩放差异 */
+        html { font-size: 16px; -webkit-text-size-adjust: 100%; }
+        body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; }
+        /* 避免表格最后一行与分页上边框叠加导致看起来更粗 */
+        #bidTableBody tr:last-child { border-bottom-width: 0 !important; }
+
+        /* Split-Flap 单次翻动动画（轻量、仅在值变化时瞬时叠加） */
+        .sf-anim {
+            position: relative;
+            display: inline-block;
+            perspective: 700px;
+            vertical-align: bottom;
+        }
+        .sf-anim::before, .sf-anim::after {
+            position: absolute;
+            left: 0; right: 0;
+            overflow: hidden;
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
+            text-align: inherit;
+            color: inherit;
+            font: inherit;
+            line-height: inherit;
+            white-space: inherit;
+        }
+        .sf-anim::before {
+            content: attr(data-old);
+            top: 0; height: 50%;
+            transform-origin: center bottom;
+            clip-path: inset(0 0 50% 0);
+            animation: sfTopClose 380ms ease-out forwards;
+        }
+        .sf-anim::after {
+            content: attr(data-new);
+            bottom: 0; height: 50%;
+            transform-origin: center top;
+            clip-path: inset(50% 0 0 0);
+            transform: rotateX(90deg);
+            animation: sfBottomOpen 460ms ease-in forwards;
+            animation-delay: 380ms;
+        }
+        @keyframes sfTopClose { to { transform: rotateX(-90deg); } }
+        @keyframes sfBottomOpen { to { transform: rotateX(0deg); } }
+        /* 整行翻转覆盖层 */
+        .sf-row-overlay {
+            position: fixed;
+            left: 0; top: 0;
+            width: 0; height: 0;
+            pointer-events: none;
+            z-index: 1000;
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 6px;
+            overflow: hidden;
+            background: transparent;
+        }
+        /* 固定各页列宽；日期和表头保持一行，长名称在自己的列内换行。 */
+        .business-table th,
+        .business-table td { white-space: nowrap; padding-left: clamp(4px, .7vw, 12px); padding-right: clamp(4px, .7vw, 12px); }
+        main { min-width: 0; }
+        .business-table { table-layout: fixed; width: 100%; }
+        .business-table td:first-child .sf-cell,
+        .business-table td:first-child .sf-anim {
+            display: block;
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .business-table td:nth-child(4) .sf-cell,
+        .business-table td:nth-child(5) .sf-cell,
+        .business-table .time-chip { flex-shrink: 0; }
+        @media (max-width: 1200px) {
+            .business-table th, .business-table td { padding-left: 8px; padding-right: 8px; }
+            .business-table th button { gap: 0; }
+            .business-table th button > span:nth-child(2) { margin-left: 4px; }
+            .business-table td:nth-child(4) > div,
+            .business-table td:nth-child(5) > div { flex-direction: column; align-items: flex-start; gap: 4px; }
+        }
+        @media (max-width: 900px) {
+            .business-table col:nth-child(8), .business-table col:nth-child(9),
+            .business-table th:nth-child(8), .business-table th:nth-child(9),
+            .business-table td:nth-child(8), .business-table td:nth-child(9) { display: none; }
+            .business-table col:nth-child(1) { width: 29%; }
+            .business-table col:nth-child(2) { width: 9%; }
+            .business-table col:nth-child(3) { width: 16%; }
+            .business-table col:nth-child(4), .business-table col:nth-child(5) { width: 13%; }
+            .business-table col:nth-child(6), .business-table col:nth-child(7) { width: 10%; }
+        }
+        @media (max-width: 640px) {
+            .stats-grid { gap: 12px; }
+            .stats-grid .stat-card { min-width: 0; padding: 12px; }
+            .stats-grid .stat-card > .flex > div:first-child { min-width: 0; }
+            .stats-grid .stat-card .text-base { font-size: 14px; }
+            .stats-grid .stat-card .rounded-full { width: 32px; height: 32px; flex-shrink: 0; }
+            .stats-grid .stat-card p[id$="Trend"] { flex-wrap: wrap; row-gap: 2px; }
+            .business-table col:nth-child(2), .business-table col:nth-child(6), .business-table col:nth-child(7),
+            .business-table th:nth-child(2), .business-table th:nth-child(6), .business-table th:nth-child(7),
+            .business-table td:nth-child(2), .business-table td:nth-child(6), .business-table td:nth-child(7) { display: none; }
+            .business-table col:nth-child(1) { width: 32%; }
+            .business-table col:nth-child(3) { width: 24%; }
+            .business-table col:nth-child(4), .business-table col:nth-child(5) { width: 22%; }
+            .business-table th, .business-table td { font-size: 12px; padding-left: 4px; padding-right: 4px; }
+        }
+        @media (max-width: 480px) {
+            .business-table col:nth-child(3), .business-table th:nth-child(3), .business-table td:nth-child(3) { display: none; }
+            .business-table col:nth-child(1) { width: 44%; }
+            .business-table col:nth-child(4), .business-table col:nth-child(5) { width: 28%; }
+        }
+        .sf-row-half { position: absolute; left: 0; right: 0; overflow: hidden; backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+        .sf-row-top { top: 0; height: 50%; transform-origin: center bottom; animation: sfTopClose 380ms ease-out forwards; }
+        .sf-row-bottom { bottom: 0; height: 50%; transform-origin: center top; transform: rotateX(90deg); animation: sfBottomOpen 460ms ease-in forwards; animation-delay: 380ms; }
+    </style>
+</head>
+
+<body class="bg-[#242424] text-text-primary min-h-screen flex overflow-x-hidden">
+    <!-- 左侧导航已移除 -->
+
+    <!-- 主内容区域 -->
+    <main class="flex-1 flex flex-col">
+        <!-- 顶部导航栏 -->
+        <header class="h-16 bg-[#242424]">
+            <div class="page-container h-full bg-[#242424]">
+                    <div class="w-full h-full flex items-center justify-between bg-[#080808] border-b border-x border-[#484848] rounded-b-lg overflow-visible">
+                <!-- 标题 -->
+                <div class="flex items-center min-w-0 flex-1 pl-3 md:pl-5">
+                <svg class="mr-2 text-text-secondary w-[22px] h-[22px] sm:w-[26px] sm:h-[26px] relative top-[1px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M9 7V5h6v2"/>
+                    <rect x="3" y="7" width="18" height="14" rx="2"/>
+                    <path d="M3 13h18"/>
+                </svg>
+                <h1 class="text-xl sm:text-2xl font-yahei text-text-secondary truncate">六院体检业务投标管理系统</h1>
+            </div>
+            
+            <!-- 右侧操作区 -->
+                <div class="flex items-center flex-wrap gap-2 sm:gap-4 pr-3 md:pr-5">
+                <!-- 统一容器：包含搜索框与头像，整体作为 group 悬停联动 -->
+                <div id="userControl" class="relative order-2 shrink-0 flex items-center gap-2 sm:gap-3"> <!-- 悬停时再左移让出空间 -->
+                    <!-- 搜索框（默认 translate-x-0，通过脚本切换偏移） -->
+                    <div class="relative hidden sm:block order-1 shrink-0 transform translate-x-0 transition-transform duration-200" id="searchBoxArea">
+                        <input id="searchInput" type="text" placeholder="Search..." class="bg-[#242424] border border-dark-100 rounded-md h-[34px] pl-8 pr-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary w-40 md:w-48">
+                        <svg id="searchIcon" class="absolute left-3 top-1/2 transform -translate-y-1/2 text-text-secondary w-4 h-4 cursor-pointer hover:text-text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <circle cx="11" cy="11" r="7"/>
+                        <path d="M21 21l-4.3-4.3"/>
+                    </svg>
+                </div>
+                
+                    <!-- 头像（默认 translate-x-0，通过脚本切换偏移） -->
+                    <button id="profileAvatar" class="order-2 w-[34px] h-[34px] box-border rounded-full overflow-hidden border border-dark-100 transform translate-x-0 transition-transform duration-200 flex items-center justify-center focus:outline-none focus:ring-1 focus:ring-primary hover:ring-1 hover:ring-primary">
+                        <img id="userAvatar" src="https://picsum.photos/id/1005/200/200" alt="User avatar" class="w-full h-full object-cover block">
+                    </button>
+                    
+                    <!-- 退出按钮：绝对定位在容器右边，默认隐藏，通过脚本控制显隐 -->
+                    <a id="logoutBtn" href="/ui/logout" title="退出登录" aria-label="退出登录" class="absolute right-0 top-1/2 -translate-y-1/2 opacity-0 invisible pointer-events-none transition-all duration-200 text-text-secondary bg-[#242424] border border-dark-100 rounded-md h-[34px] w-[64px] flex items-center justify-center hover:text-danger hover:ring-1 hover:ring-primary">
+                        <i class="bi bi-x text-text-secondary text-[22px] sm:text-[26px] leading-none relative top-[1px]"></i>
+                    </a>
+                </div>
+                </div>
+            </div>
+        </header>
+        
+        <!-- 页面内容 -->
+        <div class="flex-1 scrollbar-thin scrollbar-thumb-rounded bg-[#242424]">
+            <div class="page-container py-6">
+            <!-- 页面标题和操作按钮（已留空，不占空间） -->
+            
+            
+            <!-- 统计卡片区域 -->
+            <div class="stats-grid grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 mt-0 mb-6">
+                <!-- 总订单数 -->
+                <div id="cardTotal" class="stat-card cursor-pointer select-none">
+                    <div class="flex justify-between items-start mb-3">
+                        <div>
+                            <p class="text-text-secondary text-base font-yahei">业务总数</p>
+                            <h3 id="cardTotalValue" class="text-2xl font-bold mt-1 font-inter">248</h3>
+                            <p class="text-success text-xs flex items-center mt-1 font-inter" id="cardTotalTrend">
+                                <svg class="w-3 h-3 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <path d="M12 19V5"/>
+                                    <path d="M5 12l7-7 7 7"/>
+                                </svg>
+                                <span id="cardTotalPct">0%</span> <span id="cardTotalDelta" class="text-text-secondary ml-1">(+0)</span>
+                            </p>
+                        </div>
+                        <div class="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                            <svg class="text-primary w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M9 7V5h6v2"/>
+                                <rect x="3" y="7" width="18" height="14" rx="2"/>
+                                <path d="M3 13h18"/>
+                            </svg>
+                        </div>
+                    </div>
+                    <div class="h-12">
+                        <canvas id="totalOrdersChart"></canvas>
+                    </div>
+                </div>
+                
+                <!-- 订单项数量 -->
+                <div id="cardBidAll" class="stat-card cursor-pointer select-none">
+                    <div class="flex justify-between items-start mb-3">
+                        <div>
+                            <p class="text-text-secondary text-base font-yahei">已投标数</p>
+                            <h3 id="cardBidAllValue" class="text-2xl font-bold mt-1 font-inter">32</h3>
+                            <p class="text-danger text-xs flex items-center mt-1 font-inter" id="cardBidAllTrend">
+                                <svg class="w-3 h-3 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <path d="M12 5v14"/>
+                                    <path d="M19 12l-7 7-7-7"/>
+                                </svg>
+                                <span id="cardBidAllPct">0%</span> <span id="cardBidAllDelta" class="text-text-secondary ml-1">(+0)</span>
+                            </p>
+                        </div>
+                        <div class="w-10 h-10 rounded-full bg-danger/10 flex items-center justify-center">
+                            <svg class="text-danger w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <circle cx="12" cy="12" r="8"/>
+                                <circle cx="12" cy="12" r="2"/>
+                            </svg>
+                        </div>
+                    </div>
+                    <div class="h-12">
+                        <canvas id="orderItemsChart"></canvas>
+                    </div>
+                </div>
+                
+                <!-- 退货订单 -->
+                <div id="cardWon" class="stat-card cursor-pointer select-none">
+                    <div class="flex justify-between items-start mb-3">
+                        <div>
+                            <p class="text-text-secondary text-base font-yahei">已中标数</p>
+                            <h3 id="cardWonValue" class="text-2xl font-bold mt-1 font-inter">7</h3>
+                            <p class="text-danger text-xs flex items-center mt-1 font-inter" id="cardWonTrend">
+                                <svg class="w-3 h-3 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <path d="M12 5v14"/>
+                                    <path d="M19 12l-7 7-7-7"/>
+                                </svg>
+                                <span id="cardWonPct">0%</span> <span id="cardWonDelta" class="text-text-secondary ml-1">(+0)</span>
+                            </p>
+                        </div>
+                        <div class="w-10 h-10 rounded-full bg-warning/10 flex items-center justify-center">
+                            <i class="bi bi-trophy text-warning text-[20px]"></i>
+                        </div>
+                    </div>
+                    <div class="h-12">
+                        <canvas id="returnsChart"></canvas>
+                    </div>
+                </div>
+                
+                <!-- 已完成订单 -->
+                <div id="cardAmount" class="stat-card cursor-pointer select-none">
+                    <div class="flex justify-between items-start mb-3">
+                        <div>
+                            <p class="text-text-secondary text-base font-yahei">中标总额</p>
+                            <h3 id="cardAmountValue" class="text-2xl font-bold mt-1 font-inter">12</h3>
+                            <p class="text-success text-xs flex items-center mt-1 font-inter" id="cardAmountTrend">
+                                <svg class="w-3 h-3 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <path d="M12 19V5"/>
+                                    <path d="M5 12l7-7 7 7"/>
+                                </svg>
+                                <span id="cardAmountPct">0%</span> <span id="cardAmountDelta" class="text-text-secondary ml-1">(+0)</span>
+                            </p>
+                        </div>
+                        <div class="w-10 h-10 rounded-full bg-success/10 flex items-center justify-center">
+                            <svg class="text-success w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M6 4l6 7 6-7"/>
+                                <path d="M6 10h12"/>
+                                <path d="M6 13h12"/>
+                                <path d="M12 11v9"/>
+                            </svg>
+                        </div>
+                    </div>
+                    <div class="h-12">
+                        <canvas id="fulfilledChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+            
+            
+            <!-- 订单列表 -->
+            <div class="bg-[#242424] rounded-lg border border-[#484848] overflow-hidden">
+                <!-- 筛选器 -->
+                <div class="p-3 sm:p-4 border-b border-[#484848]">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <div id="bizListWrap" class="flex items-center gap-2 h-[34px] select-none rounded-md px-2 transition-colors">
+                            <i id="bizListIcon" class="bi bi-list-check text-text-secondary text-[24px] leading-[26px] w-[24px] h-[26px] inline-block relative top-[1px]"></i>
+                            <div id="bizListTextWrap" class="flex items-baseline" style="margin-left:-3px;">
+                                <span id="bizListText" class="text-text-secondary text-[20px] leading-[20px] inline-block">业务列表</span>
+                                <span id="bizListSuffix" class="text-text-secondary text-[16px] leading-[20px] inline-block"></span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+                        <div class="ml-auto flex items-center space-x-2 sm:space-x-3">
+                            <!-- 刷新按钮移除：按需求不显示 -->
+                            <button id="btnView" class="bg-[#242424] border border-dark-100 rounded-md w-[34px] h-[34px] text-sm text-text-secondary hover:text-text-primary hover:ring-1 hover:ring-primary focus:outline-none focus:ring-1 focus:ring-primary flex items-center justify-center" title="查看">
+                                <i class="bi bi-eye"></i>
+                        </button>
+                            <button id="btnEdit" class="bg-[#242424] border border-dark-100 rounded-md w-[34px] h-[34px] text-sm text-text-secondary hover:text-text-primary hover:ring-1 hover:ring-primary focus:outline-none focus:ring-1 focus:ring-primary flex items-center justify-center" title="编辑">
+                                <i class="bi bi-pencil-square"></i>
+                            </button>
+                            <button id="btnDelete" class="bg-[#242424] border border-dark-100 rounded-md w-[34px] h-[34px] text-sm text-text-secondary hover:text-text-primary hover:ring-1 hover:ring-primary focus:outline-none focus:ring-1 focus:ring-primary flex items-center justify-center" title="删除">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                            <button id="btnExport" class="bg-[#242424] border border-dark-100 rounded-md w-[34px] h-[34px] text-sm text-text-secondary hover:text-text-primary hover:ring-1 hover:ring-primary focus:outline-none focus:ring-1 focus:ring-primary flex items-center justify-center" title="导出">
+                                <i class="bi bi-download"></i>
+                            </button>
+                            <button id="btnCreate" class="bg-primary hover:bg-primary/90 text-white px-3 py-1.5 h-[34px] rounded-md text-sm font-medium transition-colors flex items-center">
+                                <i class="bi bi-plus-lg mr-1"></i>
+                                <span>新增业务</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 表格 -->
+                <div class="overflow-x-auto">
+                    <table class="business-table w-full text-[13px] sm:text-sm">
+                        <colgroup>
+                            <col width="25%">
+                            <col width="7%">
+                            <col width="12%">
+                            <col width="14%">
+                            <col width="14%">
+                            <col width="8%">
+                            <col width="8%">
+                            <col width="5%">
+                            <col width="7%">
+                        </colgroup>
+                        <thead>
+                            <tr class="bg-[#242424] text-text-secondary border-b border-[#484848]">
+                                <th class="text-left py-3 px-4 font-medium">业务名称</th>
+                                <th class="text-left py-3 px-4 font-medium">服务人数</th>
+                                <th class="text-left py-3 px-4 font-medium">招标金额</th>
+                                <th class="text-left py-3 px-4 font-medium">
+                                    <button id="sortSign" class="inline-flex items-center gap-1 cursor-pointer select-none hover:text-text-primary group">
+                                        <span>报名时间</span>
+                                        <span id="sortSignIconGroup" class="ml-5 inline-flex items-center justify-center w-[18px] h-[18px] relative transition-colors group-hover:text-text-primary" style="line-height:0;">
+                                            <svg id="sortSignUp" class="w-3.5 h-3.5 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 mt-[-4px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                <path d="M6 15l6-6 6 6"/>
+                                            </svg>
+                                            <svg id="sortSignDown" class="w-3.5 h-3.5 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 mt-[4px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                <path d="M6 9l6 6 6-6"/>
+                                            </svg>
+                                        </span>
+                                    </button>
+                                </th>
+                                <th class="text-left py-3 px-4 font-medium">
+                                    <button id="sortBidTime" class="inline-flex items-center gap-1 cursor-pointer select-none hover:text-text-primary group">
+                                        <span>投标时间</span>
+                                        <span id="sortBidIconGroup" class="ml-5 inline-flex items-center justify-center w-[18px] h-[18px] relative transition-colors group-hover:text-text-primary" style="line-height:0;">
+                                            <svg id="sortBidUp" class="w-3.5 h-3.5 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 mt-[-4px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                <path d="M6 15l6-6 6 6"/>
+                                            </svg>
+                                            <svg id="sortBidDown" class="w-3.5 h-3.5 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 mt-[4px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                <path d="M6 9l6 6 6-6"/>
+                                            </svg>
+                                        </span>
+                                    </button>
+                                </th>
+                                <th class="text-left py-3 px-4 font-medium">标书状态</th>
+                                <th class="text-left py-3 px-4 font-medium">投标状态</th>
+                                <th class="text-left py-3 px-4 font-medium">优先级</th>
+                                <th class="text-left py-3 px-4 font-medium">录入时间</th>
+                            </tr>
+                        </thead>
+                        <tbody id="bidTableBody">
+                        </tbody>
+                    </table>
+                </div>
+                
+                <!-- 翻页 -->
+                <div class="flex items-center justify-between px-4 py-3 border-t border-[#484848] text-sm">
+                    <div id="paginationInfo" class="text-text-secondary">Showing 1–10 of 50</div>
+                    <div class="flex items-center gap-2">
+                        <button id="prevPage" class="w-[34px] h-[34px] rounded-md border-0 bg-transparent text-text-secondary hover:text-text-primary disabled:opacity-50 flex items-center justify-center">
+                            <i class="bi bi-chevron-left text-[14px]"></i>
+                        </button>
+                        <div id="pageNumbers" class="flex items-center gap-2"></div>
+                        <button id="nextPage" class="w-[34px] h-[34px] rounded-md border-0 bg-transparent text-text-secondary hover:text-text-primary flex items-center justify-center">
+                            <i class="bi bi-chevron-right text-[14px]"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // 图表配置
+        document.addEventListener('DOMContentLoaded', function() {
+            // 顶部用户控制交互：鼠标进入容器时左移搜索框与头像，显示退出按钮；离开容器恢复初始
+            const userCtrl = document.getElementById('userControl');
+            const searchBox = document.getElementById('searchBoxArea');
+            const avatarBtn = document.getElementById('profileAvatar');
+            const logoutBtn = document.getElementById('logoutBtn');
+            if (userCtrl && searchBox && avatarBtn && logoutBtn) {
+                const shiftPx = 76; // 与按钮所需空间一致
+                const applyShift = () => {
+                    searchBox.style.transform = `translateX(-${shiftPx}px)`;
+                    avatarBtn.style.transform = `translateX(-${shiftPx}px)`;
+                    logoutBtn.classList.remove('opacity-0','invisible','pointer-events-none');
+                    logoutBtn.classList.add('opacity-100','visible');
+                };
+                const resetShift = () => {
+                    searchBox.style.transform = 'translateX(0)';
+                    avatarBtn.style.transform = 'translateX(0)';
+                    logoutBtn.classList.add('opacity-0','invisible','pointer-events-none');
+                    logoutBtn.classList.remove('opacity-100','visible');
+                };
+                // 仅头像触发
+                avatarBtn.addEventListener('mouseenter', applyShift);
+                userCtrl.addEventListener('mouseleave', resetShift);
+            }
+            // 业务列表不需要交互，确保无点击效果（移除指针手势与事件）
+            const bizWrap = document.getElementById('bizListWrap');
+            const bizIcon = document.getElementById('bizListIcon');
+            const bizText = document.getElementById('bizListText');
+            if (bizWrap && bizIcon && bizText) {
+                bizText.classList.remove('cursor-pointer');
+            }
+            // 通用图表配置
+            const commonConfig = {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        enabled: false
+                    }
+                },
+                scales: {
+                    x: {
+                        display: false
+                    },
+                    y: {
+                        display: false
+                    }
+                },
+                elements: {
+                    point: {
+                        radius: 0
+                    }
+                }
+            };
+
+            // 最近12周标签（在图表初始化之前定义，避免未定义错误）
+            const last12WeekLabels = (function(){
+                const labels = [];
+                const now = new Date();
+                const day = now.getDay();
+                const offset = (day===0?6:day-1);
+                const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate()-offset);
+                for(let i=11;i>=0;i--){
+                    const d = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() - i*7);
+                    const m = (d.getMonth()+1).toString().padStart(2,'0');
+                    const dd = d.getDate().toString().padStart(2,'0');
+                    labels.push(`${m}/${dd}`);
+                }
+                return labels;
+            })();
+
+            // 小图表实例句柄
+            const charts = {};
+            // 后端统计缓存
+            let statsCache = null;
+
+            // 总订单图表
+            charts.total = new Chart(document.getElementById('totalOrdersChart'), {
+                type: 'line',
+                data: {
+                    labels: last12WeekLabels,
+                    datasets: [{
+                        data: Array(12).fill(0),
+                        borderColor: '#7c3aed',
+                        backgroundColor: 'rgba(124, 58, 237, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    ...commonConfig
+                }
+            });
+
+            // 订单项图表（已投标/未中标/已中标总和）
+            charts.bidAll = new Chart(document.getElementById('orderItemsChart'), {
+                type: 'line',
+                data: {
+                    labels: last12WeekLabels,
+                    datasets: [{
+                        data: Array(12).fill(0),
+                        borderColor: '#ef4444',
+                        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    ...commonConfig
+                }
+            });
+
+            // 已中标数量
+            charts.won = new Chart(document.getElementById('returnsChart'), {
+                type: 'line',
+                data: {
+                    labels: last12WeekLabels,
+                    datasets: [{
+                        data: Array(12).fill(0),
+                        borderColor: '#f59e0b',
+                        backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    ...commonConfig
+                }
+            });
+
+            // 中标总额（万元）
+            charts.amount = new Chart(document.getElementById('fulfilledChart'), {
+                type: 'line',
+                data: {
+                    labels: last12WeekLabels,
+                    datasets: [{
+                        data: Array(12).fill(0),
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    ...commonConfig
+                }
+            });
+            // 根据后端或前端数据刷新四张小图
+            function updateAllCharts(){
+                const series = statsCache && statsCache.series ? statsCache.series : null;
+                if(charts.total){
+                    charts.total.data.datasets[0].data = series ? series.total : buildLast12WeeksSeries('total');
+                    charts.total.update();
+                }
+                if(charts.bidAll){
+                    charts.bidAll.data.datasets[0].data = series ? series.bidAll : buildLast12WeeksSeries('bidAll');
+                    charts.bidAll.update();
+                }
+                if(charts.won){
+                    charts.won.data.datasets[0].data = series ? series.won : buildLast12WeeksSeries('won');
+                    charts.won.update();
+                }
+                if(charts.amount){
+                    charts.amount.data.datasets[0].data = series ? series.amount : buildLast12WeeksSeries('amount');
+                    charts.amount.update();
+                }
+            }
+            // ---------- 后端数据接入（替换随机数据） ----------
+            const tableBody = document.getElementById('bidTableBody');
+            const paginationInfo = document.getElementById('paginationInfo');
+            const prevBtn = document.getElementById('prevPage');
+            const nextBtn = document.getElementById('nextPage');
+            const pageNumbers = document.getElementById('pageNumbers');
+            // 刷新按钮已移除
+
+            const projects = [
+                '天友乳业2025职工体检','重庆建筑科技职业学院体检项目','重庆传媒职业学院体检项目','重庆工程职业技术学院体检项目','重庆体育职业学院体检项目','西南大学体检项目','重庆医药高等专科学校体检项目','重庆工业职业技术学院体检项目','重庆邮电大学体检项目','重庆商务职业学院体检项目'
+            ];
+            const statusBook = ['已获取','未获取'];
+            const statusBid = ['未报名','已报名','未投标','已投标','未中标','已中标'];
+            const priorityOpts = ['低','中','高'];
+
+            
+
+            function rand(min, max){ return Math.floor(Math.random()*(max-min+1))+min; }
+            function pad(n){ return n.toString().padStart(2,'0'); }
+            function money(){ return '¥'+(rand(2,9000)*1000 + rand(0,999)).toLocaleString('zh-CN',{minimumFractionDigits:2}); }
+            // 在 06-04 到 08-20 之间生成随机日期（当年）
+            function dateStr(){
+                const year = new Date().getFullYear();
+                const start = new Date(year, 5, 4);   // 6月为索引5
+                const end   = new Date(year, 7, 20);  // 8月为索引7
+                const span = end.getTime() - start.getTime();
+                const ts = start.getTime() + Math.random()*span;
+                const d = new Date(ts);
+                return pad(d.getMonth()+1)+'-'+pad(d.getDate());
+            }
+            function tag(text, cls){ return `<span class="status-badge ${cls}">${text}</span>`; }
+
+            let totalItems = 0;
+            const pageSize = 10;
+            let currentPage = 1;
+            let selectedBusinessId = null; // 按业务 ID 保留选中状态，避免跨页选错行
+            function clearRowSelection(){
+                selectedBusinessId = null;
+                tableBody.querySelectorAll('tr.row-selected').forEach(row => row.classList.remove('row-selected'));
+            }
+            // 视图状态：none 默认、total 总览排序、bidAll 三类、won 中标、amount 中标金额排序
+            let viewState = { mode: 'none' };
+            // 非持久化筛选状态（仅本页内存，不写入URL；刷新后恢复初始）
+            let transientFilter = { bid_status: null, sort: null };
+
+            let data = [];
+            const serverPaging = true; // 后端分页标记
+            const alwaysFlipRows = true; // 每次渲染都触发整行翻牌
+
+            function fmtDate(dt){
+                if(!dt) return '-';
+                try{ const d = new Date(dt); const mm = String(d.getMonth()+1).padStart(2,'0'); const dd = String(d.getDate()).padStart(2,'0'); return `${mm}-${dd}`; }catch{ return '-'; }
+            }
+
+            function daysLeft(iso){
+                if(!iso) return null;
+                try{
+                    const d = new Date(iso);
+                    const today = new Date();
+                    const t0 = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+                    const t1 = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+                    const diffMs = t1 - t0;
+                    return Math.ceil(diffMs / (24*3600*1000));
+                }catch{ return null; }
+            }
+
+            function makeDeadlineBadge(iso){
+                const left = daysLeft(iso);
+                if(left===null) return { text: '-', cls: 'text-text-secondary' };
+                if(left < 0) return { text: '已过期', cls: 'text-text-secondary' };
+                if(left === 0) return { text: '今截止', cls: 'text-danger' };
+                // 特殊：剩余1/2/3天 使用红色
+                if(left === 1 || left === 2 || left === 3) return { text: `剩${left}天`, cls: 'text-danger' };
+                return { text: `剩${left}天`, cls: 'text-warning' };
+            }
+
+            async function fetchPage(page, preserveSelection = false){
+                if(!preserveSelection) clearRowSelection();
+                const url = new URL(window.location.href);
+                const search = url.searchParams.get('search')||'';
+                const urlSort = url.searchParams.get('sort')||'created_at';
+                const urlBidStatus = url.searchParams.get('bid_status')||'';
+                const effSort = transientFilter.sort !== null ? transientFilter.sort : urlSort;
+                const effBidStatus = transientFilter.bid_status !== null ? transientFilter.bid_status : urlBidStatus;
+                const resp = await fetch(`/api/listing?page=${page}&search=${encodeURIComponent(search)}&sort=${encodeURIComponent(effSort)}&bid_status=${encodeURIComponent(effBidStatus)}&_=${Date.now()}`);
+                const json = await resp.json();
+                totalItems = json.total;
+                data = json.items.map(r=>{
+                    const signBadge = makeDeadlineBadge(r.registration_time);
+                    const bidBadge = makeDeadlineBadge(r.bid_time);
+                    return {
+                    id: r.id,
+                    p: r.name,
+                    people: (r.service_people||0)+'人',
+                    amount: r.bid_amount>0? ('¥'+Number(r.bid_amount).toLocaleString('zh-CN',{minimumFractionDigits:2})) : '-',
+                    signDate: fmtDate(r.registration_time),
+                    bidDate: fmtDate(r.bid_time),
+                    book: r.document_status||'-',
+                    bid: r.bid_status||'-',
+                    priority: r.priority||'-',
+                    created: fmtDate(r.created_at),
+                    signText: signBadge.text, signCls: signBadge.cls,
+                    bidText: bidBadge.text, bidCls: bidBadge.cls,
+                    bidColorCls: (v=>{ if(v==='未报名'||v==='未投标'||v==='未中标') return 'text-text-secondary'; if(v==='已报名'||v==='已投标'||v==='已中标') return 'text-success'; return 'text-text-secondary';})(r.bid_status||'')
+                }});
+                currentPage = json.page;
+                renderTable(currentPage);
+            }
+
+            let sortState = { sign: 0, bid: 0 }; // 0: none, 1: asc, -1: desc
+
+            // 工具：金额字符串转数字（元）
+            function parseAmountToYuan(str){
+                try{
+                    return Number(str.replace(/[^0-9.]/g,'') || 0);
+                } catch { return 0; }
+            }
+
+            // 将 MM-DD 转换为当年的 Date
+            function dateFromCreated(mmdd){
+                if(!mmdd) return new Date();
+                const [mm, dd] = mmdd.split('-').map(v=>parseInt(v,10));
+                return new Date(new Date().getFullYear(), (mm||1)-1, dd||1);
+            }
+
+            // 计算某指标在时间窗口内的值（count 或 金额万）
+            // metric: 'total' | 'bidAll' | 'won' | 'amount'
+            function computeMetricValue(metric, startInclusive, endExclusive){
+                const bidAllSet = new Set(['已投标','未中标','已中标']);
+                let acc = 0;
+                for(const item of data){
+                    const d = dateFromCreated(item.created);
+                    if(!(d >= startInclusive && d < endExclusive)) continue;
+                    if(metric==='total') acc += 1;
+                    else if(metric==='bidAll') { if(bidAllSet.has(item.bid)) acc += 1; }
+                    else if(metric==='won') { if(item.bid==='已中标') acc += 1; }
+                    else if(metric==='amount') { if(item.bid==='已中标') acc += parseAmountToYuan(item.amount)/10000; }
+                }
+                return acc;
+            }
+
+            // 从数据生成"最近12周"的指标序列（按 created 日期落入周窗口）
+            // metric: 'total' | 'bidAll' | 'won' | 'amount'
+            function buildLast12WeeksSeries(metric){
+                const weeks = Array(12).fill(0);
+                const bidAllSet = new Set(['已投标','未中标','已中标']);
+                const base = data.slice();
+                // 以周一为边界，构建12个周的起始时间数组
+                const now = new Date();
+                const day = now.getDay();
+                const offset = (day===0?6:day-1);
+                const thisMonday = new Date(now.getFullYear(), now.getMonth(), now.getDate()-offset);
+                const weekStarts = Array.from({length:12}, (_,i)=> new Date(thisMonday.getFullYear(), thisMonday.getMonth(), thisMonday.getDate() - (11-i)*7));
+                const weekEnds = weekStarts.map(ws=> new Date(ws.getFullYear(), ws.getMonth(), ws.getDate()+7));
+
+                base.forEach(item=>{
+                    const d = dateFromCreated(item.created);
+                    // 找到日期所在的周索引
+                    let idx = -1;
+                    for(let i=0;i<12;i++){
+                        if(d>=weekStarts[i] && d<weekEnds[i]){ idx = i; break; }
+                    }
+                    if(idx===-1) return;
+                    if(metric==='total'){
+                        weeks[idx] += 1;
+                    } else if(metric==='bidAll'){
+                        if(bidAllSet.has(item.bid)) weeks[idx] += 1;
+                    } else if(metric==='won'){
+                        if(item.bid==='已中标') weeks[idx] += 1;
+                    } else if(metric==='amount'){
+                        if(item.bid==='已中标') weeks[idx] += parseAmountToYuan(item.amount)/10000; // 万元
+                    }
+                });
+                return weeks;
+            }
+
+            // 统计数据并带动画更新卡片（若有后端数据优先用后端）
+            function computeAndRenderStats(){
+                const elTotal = document.getElementById('cardTotalValue');
+                const elBidAll = document.getElementById('cardBidAllValue');
+                const elWon = document.getElementById('cardWonValue');
+                const elAmount = document.getElementById('cardAmountValue');
+                const trTotal = document.getElementById('cardTotalTrend');
+                const trBidAll = document.getElementById('cardBidAllTrend');
+                const trWon = document.getElementById('cardWonTrend');
+                const trAmount = document.getElementById('cardAmountTrend');
+                const pctTotal = document.getElementById('cardTotalPct');
+                const pctBidAll = document.getElementById('cardBidAllPct');
+                const pctWon = document.getElementById('cardWonPct');
+                const pctAmount = document.getElementById('cardAmountPct');
+                const deltaTotal = document.getElementById('cardTotalDelta');
+                const deltaBidAll = document.getElementById('cardBidAllDelta');
+                const deltaWon = document.getElementById('cardWonDelta');
+                const deltaAmount = document.getElementById('cardAmountDelta');
+
+                const animateNumber = (el, toVal) => {
+                    if(!el) return;
+                    const fromVal = parseInt(el.textContent.replace(/[^0-9]/g,'')) || 0;
+                    const start = performance.now();
+                    const duration = 350;
+                    const step = (now)=>{
+                        const p = Math.min(1, (now - start)/duration);
+                        const cur = Math.round(fromVal + (toVal - fromVal) * p);
+                        el.textContent = cur.toString();
+                        if(p<1) requestAnimationFrame(step);
+                    };
+                    requestAnimationFrame(step);
+                };
+
+                if(statsCache && statsCache.totals){
+                    animateNumber(elTotal, statsCache.totals.total||0);
+                    animateNumber(elBidAll, statsCache.totals.bidAll||0);
+                    animateNumber(elWon, statsCache.totals.won||0);
+                    animateNumber(elAmount, statsCache.totals.amountWan||0);
+
+                    if(statsCache.trends){
+                        const t = statsCache.trends;
+                        if(pctTotal) pctTotal.textContent = `${t.total.pct}%`;
+                        if(deltaTotal) deltaTotal.textContent = `${t.total.delta>=0? '(+'+t.total.delta+')' : '('+t.total.delta+')'}`;
+                        if(trTotal){
+                            trTotal.classList.remove('text-success','text-danger');
+                            trTotal.classList.add((t.total.delta>=0)?'text-success':'text-danger');
+                            // 调整箭头方向：上升使用上箭头，下降使用下箭头
+                            const svg = trTotal.querySelector('svg');
+                            if(svg){ svg.innerHTML = t.total.delta>=0 ? '<path d="M12 19V5"/><path d="M5 12l7-7 7 7"/>' : '<path d="M12 5v14"/><path d="M19 12l-7 7-7-7"/>'; }
+                        }
+
+                        if(pctBidAll) pctBidAll.textContent = `${t.bidAll.pct}%`;
+                        if(deltaBidAll) deltaBidAll.textContent = `${t.bidAll.delta>=0? '(+'+t.bidAll.delta+')' : '('+t.bidAll.delta+')'}`;
+                        if(trBidAll){
+                            trBidAll.classList.remove('text-success','text-danger');
+                            trBidAll.classList.add((t.bidAll.delta>=0)?'text-success':'text-danger');
+                            const svg = trBidAll.querySelector('svg');
+                            if(svg){ svg.innerHTML = t.bidAll.delta>=0 ? '<path d="M12 19V5"/><path d="M5 12l7-7 7 7"/>' : '<path d="M12 5v14"/><path d="M19 12l-7 7-7-7"/>'; }
+                        }
+
+                        if(pctWon) pctWon.textContent = `${t.won.pct}%`;
+                        if(deltaWon) deltaWon.textContent = `${t.won.delta>=0? '(+'+t.won.delta+')' : '('+t.won.delta+')'}`;
+                        if(trWon){
+                            trWon.classList.remove('text-success','text-danger');
+                            trWon.classList.add((t.won.delta>=0)?'text-success':'text-danger');
+                            const svg = trWon.querySelector('svg');
+                            if(svg){ svg.innerHTML = t.won.delta>=0 ? '<path d="M12 19V5"/><path d="M5 12l7-7 7 7"/>' : '<path d="M12 5v14"/><path d="M19 12l-7 7-7-7"/>'; }
+                        }
+
+                        if(pctAmount) pctAmount.textContent = `${t.amount.pct}%`;
+                        if(deltaAmount) deltaAmount.textContent = `${t.amount.delta>=0? '(+'+t.amount.delta+')' : '('+t.amount.delta+')'}`;
+                        if(trAmount){
+                            trAmount.classList.remove('text-success','text-danger');
+                            trAmount.classList.add((t.amount.delta>=0)?'text-success':'text-danger');
+                            const svg = trAmount.querySelector('svg');
+                            if(svg){ svg.innerHTML = t.amount.delta>=0 ? '<path d="M12 19V5"/><path d="M5 12l7-7 7 7"/>' : '<path d="M12 5v14"/><path d="M19 12l-7 7-7-7"/>'; }
+                        }
+                    }
+                    return; // 使用后端数据后返回
+                }
+
+                // Fallback：基于当前表格数据估算
+                const bidAllSet = new Set(['已投标','未中标','已中标']);
+                const total = data.length;
+                const bidAllCnt = data.filter(d=>bidAllSet.has(d.bid)).length;
+                const wonCnt = data.filter(d=>d.bid==='已中标').length;
+                const now = new Date();
+                const endA = now; const startA = new Date(now.getFullYear(), now.getMonth(), now.getDate()-30);
+                const endB = startA; const startB = new Date(now.getFullYear(), now.getMonth(), now.getDate()-60);
+                const curAmountWan = Math.round(computeMetricValue('amount', startA, endA));
+
+                animateNumber(elTotal, total);
+                animateNumber(elBidAll, bidAllCnt);
+                animateNumber(elWon, wonCnt);
+                animateNumber(elAmount, curAmountWan);
+
+                function setTrend(metric, pctEl, deltaEl, trendP){
+                    let cur = computeMetricValue(metric, startA, endA);
+                    let prev = computeMetricValue(metric, startB, endB);
+                    if(metric==='amount'){ cur = Math.round(cur); prev = Math.round(prev); }
+                    const delta = cur - prev;
+                    const pct = prev===0 ? (cur>0 ? 100 : 0) : Math.round((delta/prev)*1000)/10;
+                    if(pctEl) pctEl.textContent = `${pct}%`;
+                    if(deltaEl) deltaEl.textContent = `${delta>=0? '(+'+delta+')' : '('+delta+')'}`;
+                    if(trendP){ trendP.classList.remove('text-success','text-danger'); trendP.classList.add(delta>=0 ? 'text-success' : 'text-danger'); }
+                    }
+                setTrend('total', pctTotal, deltaTotal, trTotal);
+                setTrend('bidAll', pctBidAll, deltaBidAll, trBidAll);
+                setTrend('won', pctWon, deltaWon, trWon);
+                setTrend('amount', pctAmount, deltaAmount, trAmount);
+            }
+
+            async function fetchStats(){
+                try{
+                    const resp = await fetch(`/api/stats?_=${Date.now()}`);
+                    if(!resp.ok) return;
+                    const json = await resp.json();
+                    statsCache = json;
+                    updateAllCharts();
+                    computeAndRenderStats();
+                }catch(e){ /* ignore */ }
+            }
+
+            function flashCard(card){
+                if(!card) return;
+                card.classList.remove('card-flash');
+                // 强制回流，确保重复触发也能播放动画
+                void card.offsetWidth;
+                card.classList.add('card-flash');
+                setTimeout(()=> card.classList.remove('card-flash'), 800);
+            }
+
+            function flashCardById(id){
+                const el = document.getElementById(id);
+                if(el){
+                    el.classList.remove('card-flash');
+                    void el.offsetWidth;
+                    el.classList.add('card-flash');
+                    setTimeout(()=> el.classList.remove('card-flash'), 800);
+                }
+            }
+
+            function renderTable(page){
+                const start = (page-1)*pageSize;
+                // 过滤 + 排序
+                let working = [...data];
+                const parseMD = (s)=>{ const [mm,dd]=s.split('-').map(v=>parseInt(v,10)); return (mm*100)+dd; };
+                // 视图模式优先（仅在本地分页时生效）；服务端分页时依赖 URL 参数由后端完成过滤/排序
+                if(!serverPaging){
+                if(viewState.mode==='total'){
+                    working.sort((a,b)=> parseMD(b.created) - parseMD(a.created));
+                } else if(viewState.mode==='bidAll'){
+                    const keep = new Set(['已投标','未中标','已中标']);
+                    working = working.filter(r=> keep.has(r.bid));
+                    working.sort((a,b)=> parseMD(b.created) - parseMD(a.created));
+                } else if(viewState.mode==='won'){
+                    working = working.filter(r=> r.bid==='已中标');
+                    working.sort((a,b)=> parseMD(b.created) - parseMD(a.created));
+                } else if(viewState.mode==='amount'){
+                    working = working.filter(r=> r.bid==='已中标');
+                    working.sort((a,b)=> parseAmountToYuan(b.amount) - parseAmountToYuan(a.amount));
+                    }
+                } else {
+                    // 默认按照列头排序
+                    if (sortState.sign!==0) {
+                        working.sort((a,b)=> (parseMD(a.signDate)-parseMD(b.signDate)) * sortState.sign);
+                    } else if (sortState.bid!==0) {
+                        working.sort((a,b)=> (parseMD(a.bidDate)-parseMD(b.bidDate)) * sortState.bid);
+                    }
+                }
+
+                const slice = serverPaging ? working : working.slice(start, start+pageSize);
+                // 对比之前的 DOM 文本，以便触发动画
+                const prevCells = Array.from(tableBody.querySelectorAll('tr')).map(tr=>({
+                    p: tr.children[0]?.textContent?.trim()||'',
+                    people: tr.children[1]?.textContent?.trim()||'',
+                    amount: tr.children[2]?.textContent?.trim()||'',
+                    signDate: tr.children[3]?.querySelector('span')?.textContent?.trim()||'',
+                    bidDate: tr.children[4]?.querySelector('span')?.textContent?.trim()||'',
+                    book: tr.children[5]?.querySelector('button')?.textContent?.trim()||'',
+                    bid: tr.children[6]?.querySelector('button')?.textContent?.trim()||'',
+                    priority: tr.children[7]?.textContent?.trim()||'',
+                    created: tr.children[8]?.textContent?.trim()||''
+                }));
+
+                tableBody.innerHTML = slice.map((row, i)=>{
+                    const originalIndex = data.indexOf(row); // 保持与原始数据索引对应
+                    const isSelected = selectedBusinessId === row.id;
+                    // 预先构造单元格文本，便于包裹动画容器
+                    const cellTexts = {
+                        p: row.p,
+                        people: row.people,
+                        amount: row.amount,
+                        signDate: row.signDate,
+                        bidDate: row.bidDate,
+                        book: row.book,
+                        bid: row.bid,
+                        priority: row.priority,
+                        created: row.created
+                    };
+                    return `
+                    <tr class="border-b border-[#484848] table-row-hover ${isSelected ? 'row-selected' : ''}" data-row-index="${originalIndex}">
+                        <td class="py-3 px-4"><span class="sf-cell" data-key="p">${cellTexts.p}</span></td>
+                        <td class="py-3 px-4"><span class="sf-cell" data-key="people">${cellTexts.people}</span></td>
+                        <td class="py-3 px-4 font-medium text-success"><span class="sf-cell" data-key="amount">${cellTexts.amount}</span></td>
+                        <td class="py-3 px-4"><div class="flex items-center gap-2"><span class="sf-cell" data-key="signDate">${cellTexts.signDate}</span><span class="chip time-chip ${row.signCls}">${row.signText}</span></div></td>
+                        <td class="py-3 px-4"><div class="flex items-center gap-2"><span class="sf-cell" data-key="bidDate">${cellTexts.bidDate}</span><span class="chip time-chip ${row.bidCls}">${row.bidText}</span></div></td>
+                        <td class="py-3 px-4">
+                            <div class="relative inline-block">
+                                <button class="chip ${row.book==='已获取' ? 'text-success' : 'text-text-secondary'} focus:outline-none focus:ring-1 focus:ring-primary/60" data-type="book" data-index="${originalIndex}" data-id="${row.id}"><span class="sf-cell" data-key="book">${cellTexts.book}</span></button>
+                                <div class="hidden dropdown-panel" data-dropdown="book">
+                                    ${statusBook.map(s=>`<div class='dropdown-item' data-value='${s}'>${s}</div>`).join('')}
+                                </div>
+                            </div>
+                        </td>
+                        <td class="py-3 px-4">
+                            <div class="relative inline-block">
+                                <button class="chip ${row.bidColorCls} focus:outline-none focus:ring-1 focus:ring-primary/60" data-type="bid" data-index="${originalIndex}" data-id="${row.id}"><span class="sf-cell" data-key="bid">${cellTexts.bid}</span></button>
+                                <div class="hidden dropdown-panel" data-dropdown="bid">
+                                    ${['未报名','已报名','未投标','已投标','未中标','已中标'].map(s=>`<div class='dropdown-item' data-value='${s}'>${s}</div>`).join('')}
+                                </div>
+                            </div>
+                        </td>
+                        <td class="py-3 px-4"><span class="sf-cell" data-key="priority">${cellTexts.priority}</span></td>
+                        <td class="py-3 px-4"><span class="sf-cell" data-key="created">${cellTexts.created}</span></td>
+                    </tr>`
+                }).join('');
+
+                // 整行翻牌效果撤销：不再创建覆盖层
+
+                // 渲染后，对比并为变化的单元格触发一次性 split-flap 动画
+                Array.from(tableBody.querySelectorAll('tr')).forEach((tr, idx)=>{
+                    const nameCell = tr.querySelector('td:first-child');
+                    if(nameCell) nameCell.title = nameCell.textContent.trim();
+                    const prev = prevCells[idx];
+                    if(!prev) return;
+                    tr.querySelectorAll('.sf-cell').forEach(span=>{
+                        const key = span.getAttribute('data-key');
+                        const oldVal = (prev[key]||'').trim();
+                        const newVal = (span.textContent||'').trim();
+                        if(oldVal!=='' && newVal!=='' && oldVal !== newVal){
+                            // 建立一个临时元素包裹以承载动画伪元素
+                            const wrap = document.createElement('span');
+                            wrap.className = 'sf-anim';
+                            wrap.setAttribute('data-old', oldVal);
+                            wrap.setAttribute('data-new', newVal);
+                            // 固定宽度以避免跳动
+                            const rect = span.getBoundingClientRect();
+                            wrap.style.display = 'inline-block';
+                            wrap.style.width = Math.ceil(rect.width) + 'px';
+                            wrap.style.height = Math.ceil(rect.height) + 'px';
+                            // 将真实文本移入 wrap 内，动画层由 ::before/::after 覆盖
+                            span.replaceWith(wrap);
+                            const real = document.createElement('span');
+                            real.textContent = newVal;
+                            real.style.visibility = 'hidden';
+                            wrap.appendChild(real);
+                            // 动画结束后，替换回普通文本节点，避免累积 DOM
+                            setTimeout(()=>{
+                                const plain = document.createElement('span');
+                                plain.className = 'sf-cell';
+                                plain.setAttribute('data-key', key);
+                                plain.textContent = newVal;
+                                wrap.replaceWith(plain);
+                            }, 900);
+                        }
+                    });
+                });
+                // 行交互：点击选中（去掉按下/放开呼吸效果）
+                tableBody.querySelectorAll('tr').forEach(tr => {
+                    tr.addEventListener('click', (e) => {
+                        const target = e.target;
+                        if (target.closest('button.chip') || target.closest('[data-dropdown]')) return;
+                        const idx = parseInt(tr.getAttribute('data-row-index'));
+                        selectedBusinessId = data[idx].id;
+                        tableBody.querySelectorAll('tr.row-selected').forEach(r => r.classList.remove('row-selected'));
+                        tr.classList.add('row-selected');
+                    });
+                });
+
+                const totalPages = Math.ceil(totalItems/pageSize);
+                paginationInfo.textContent = `Showing ${(start+1)}–${Math.min(start+pageSize,totalItems)} of ${totalItems}`;
+                prevBtn.disabled = page===1;
+                nextBtn.disabled = page===totalPages;
+
+                // 页码渲染（最多显示5个窗口）
+                const windowSize = 5;
+                let startPage = Math.max(1, page - Math.floor(windowSize/2));
+                let endPage = Math.min(totalPages, startPage + windowSize - 1);
+                if(endPage - startPage + 1 < windowSize){
+                    startPage = Math.max(1, endPage - windowSize + 1);
+                }
+                pageNumbers.innerHTML = '';
+                for(let p=startPage; p<=endPage; p++){
+                    const btn = document.createElement('button');
+                    btn.className = 'w-[34px] h-[34px] rounded-md border-0 flex items-center justify-center '+(p===page? 'bg-primary text-white' : 'bg-[#242424] text-text-secondary hover:text-text-primary');
+                    btn.textContent = p;
+                    btn.addEventListener('click', ()=>{ currentPage=p; fetchPage(currentPage, true); });
+                    pageNumbers.appendChild(btn);
+                }
+
+                // 绑定下拉事件（标书状态、投标状态）
+                tableBody.querySelectorAll('button.chip').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const wrapper = btn.parentElement;
+                        const type = btn.getAttribute('data-type');
+                        const dd = wrapper.querySelector(`[data-dropdown="${type}"]`);
+                        // 关闭其他下拉
+                        document.querySelectorAll('[data-dropdown]').forEach(el=>{ if(el!==dd) el.classList.add('hidden'); });
+                        // 定位：默认向下；若接近表格底部则向上
+                        const rect = btn.getBoundingClientRect();
+                        const viewH = window.innerHeight || document.documentElement.clientHeight;
+                        dd.classList.remove('hidden');
+                        dd.classList.add('dropdown-panel');
+                        dd.style.position = 'fixed';
+                        dd.style.opacity = '0';
+                        dd.style.transform = 'scale(0.98) translateY(4px)';
+                        // 使弹出框宽度与选框一致
+                        const w = Math.round(rect.width);
+                        dd.style.width = w + 'px';
+                        dd.style.minWidth = w + 'px';
+                        dd.style.maxWidth = w + 'px';
+                        // 先测量真实高度，避免贴合误差
+                        dd.style.visibility = 'hidden';
+                        const measured = dd.getBoundingClientRect().height || 160;
+                        dd.style.visibility = '';
+                        const spaceBelow = viewH - rect.bottom;
+                        const openUp = spaceBelow < measured + 8;
+                        const left = Math.round(rect.left);
+                        let top;
+                        if (openUp) {
+                            // 紧贴按钮上边缘
+                            top = Math.max(8, Math.round(rect.top) - measured - 6);
+                            dd.style.transform = 'scale(0.98) translateY(-4px)';
+                            dd.style.transformOrigin = 'bottom left';
+                        } else {
+                            top = Math.min(viewH - 8, Math.round(rect.bottom) + 6);
+                            dd.style.transformOrigin = 'top left';
+                        }
+                        dd.style.left = left + 'px';
+                        dd.style.top = top + 'px';
+                        dd.style.bottom = 'auto';
+                        dd.style.margin = '0';
+                        // 动效与 Filter by 选择框一致：轻微位移 + 渐入
+                        requestAnimationFrame(()=>{
+                            dd.style.opacity = '1';
+                            dd.style.transform = 'scale(1) translateY(0)';
+                        });
+
+                        dd.querySelectorAll('[data-value]').forEach(item => {
+                            item.onclick = async () => {
+                                clearRowSelection();
+                                const idx = parseInt(btn.getAttribute('data-index'));
+                                const val = item.getAttribute('data-value');
+                                const oldBid = (type==='bid') ? (btn.getAttribute('data-current') || btn.textContent || data[idx]?.bid || '') : '';
+                                // 先即时更新按钮文本与颜色，给予用户即时反馈
+                                try{
+                                    btn.textContent = val;
+                                    if(type==='bid'){
+                                        btn.classList.remove('text-success','text-text-secondary');
+                                        if(val==='未报名' || val==='未投标' || val==='未中标') btn.classList.add('text-text-secondary');
+                                        else btn.classList.add('text-success');
+                                        btn.setAttribute('data-current', val);
+                                    } else if(type==='book'){
+                                        btn.classList.remove('text-success','text-text-secondary');
+                                        if(val==='已获取') btn.classList.add('text-success'); else btn.classList.add('text-text-secondary');
+                                    }
+                                }catch(e){ /* ignore */ }
+                                // 立即关闭下拉，等待后端保存后统一刷新，避免本地索引错位
+                                dd.classList.add('hidden');
+                                // 后端持久化
+                                try{
+                                    // 优先使用按钮上的 data-id，避免索引错位
+                                    const idAttr = btn.getAttribute('data-id');
+                                    const id = idAttr ? parseInt(idAttr,10) : (data[idx].id || data[idx]._id || null);
+                                    // 如果前端未缓存id，则退化为刷新当前页
+                                    if(id==null){ await fetchPage(currentPage); await fetchStats(); return; }
+                                    const resp = await fetch(`/api/business/${id}/status`, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ type: type==='book'?'book':'bid', value: val })
+                                    });
+                                    if(!resp.ok){ throw new Error('save failed'); }
+                                    // 根据是否处于筛选/特殊排序视图决定是否刷新表格
+                                    const curUrl = new URL(window.location.href);
+                                    const urlSort = curUrl.searchParams.get('sort')||'created_at';
+                                    const urlFilter = curUrl.searchParams.get('bid_status')||'';
+                                    // 兼容临时筛选（transientFilter 不写入 URL 的情况）
+                                    const effSort = (typeof transientFilter!=='undefined' && transientFilter.sort!==null) ? transientFilter.sort : urlSort;
+                                    const effFilter = (typeof transientFilter!=='undefined' && transientFilter.bid_status!==null) ? transientFilter.bid_status : urlFilter;
+                                    const isFilteredView = (effFilter!=='' || (effSort && effSort!=='created_at'));
+                                    if(!isFilteredView){
+                                        // 非筛选视图：刷新表格到第1页，保持一致
+                                        currentPage = 1;
+                                        await fetchPage(currentPage);
+                                    }
+                                    // 筛选视图下：若新值不在当前筛选范围内，给该行添加“标记”类但不移位（仅逻辑，样式独立配置）
+                                    if(isFilteredView && type==='bid'){
+                                        const tr = btn.closest('tr');
+                                        if(tr){
+                                            const curEff = effFilter; // 当前筛选的 bid_status，可能为空字符串
+                                            const inScope = (curEff==='')
+                                                || (curEff==='已投标' && (val==='已投标' || val==='未中标' || val==='已中标'))
+                                                || (curEff==='已中标' && val==='已中标');
+                                            if(!inScope){ tr.classList.add('row-faded'); }
+                                        }
+                                    }
+                                    
+                                    await fetchStats();
+                                    // 在统计数值和图表都更新进 DOM 后再触发动画
+                                    await new Promise(requestAnimationFrame);
+                                    // 触发相关卡片悬停高亮效果（模拟 hover 态）基于"旧值→新值"的规则
+                                    const toFlash = new Set();
+                                    if(type==='bid'){
+                                        const OUT = new Set(['未报名','已报名','未投标']);
+                                        const IN_NONWON = new Set(['已投标','未中标']);
+                                        const isWon = (s)=> s==='已中标';
+                                        const inSet = (s)=> OUT.has(s)?'OUT':(isWon(s)?'WON':(IN_NONWON.has(s)?'IN':'OTHER'));
+                                        const fromG = inSet(oldBid);
+                                        const toG = inSet(val);
+
+                                        // 规则映射
+                                        if(fromG==='OUT' && toG==='IN'){
+                                            toFlash.add('cardBidAll');
+                                        } else if(fromG==='OUT' && toG==='WON'){
+                                            toFlash.add('cardBidAll'); toFlash.add('cardWon'); toFlash.add('cardAmount');
+                                        } else if(fromG==='IN' && toG==='WON'){
+                                            toFlash.add('cardWon'); toFlash.add('cardAmount');
+                                        } else if(fromG==='WON' && toG==='IN'){
+                                            toFlash.add('cardWon'); toFlash.add('cardAmount');
+                                        } else if((fromG==='IN' || fromG==='WON') && toG==='OUT'){
+                                            toFlash.add('cardBidAll');
+                                            if(fromG==='WON'){ toFlash.add('cardWon'); toFlash.add('cardAmount'); }
+                                        }
+                                    }
+                                    toFlash.forEach(id=> flashCardById(id));
+                                }catch(e){ /* ignore */ }
+                            };
+                        });
+                    });
+                });
+
+                // 刷新统计卡片数值（带动画，基于全量数据）
+                computeAndRenderStats();
+            }
+
+            // 点击页面其他区域关闭所有下拉
+            document.addEventListener('click', () => {
+                document.querySelectorAll('[data-dropdown]').forEach(el=> el.classList.add('hidden'));
+            });
+
+            prevBtn.addEventListener('click', ()=>{ if(currentPage>1){ currentPage--; fetchPage(currentPage, true);} });
+            nextBtn.addEventListener('click', ()=>{ currentPage++; fetchPage(currentPage, true);} );
+
+            fetchPage(currentPage);
+            fetchStats();
+            updateAllCharts();
+
+            // 无刷新按钮逻辑
+
+            // 工具栏操作使用所选业务的 ID，不受当前页行位置影响。
+            function getSelectedId(){
+                return selectedBusinessId;
+            }
+            function showTip(msg){
+                try{
+                    const tip = document.createElement('div');
+                    tip.textContent = msg || '请先在表格中选择一行';
+                    tip.style.position = 'fixed';
+                    tip.style.top = '20px';
+                    tip.style.right = '20px';
+                    tip.style.zIndex = '9999';
+                    tip.style.background = 'rgba(0,0,0,0.8)';
+                    tip.style.color = '#fff';
+                    tip.style.padding = '8px 12px';
+                    tip.style.borderRadius = '8px';
+                    document.body.appendChild(tip);
+                    setTimeout(()=> tip.remove(), 1800);
+                }catch{}
+            }
+            const btnView = document.getElementById('btnView');
+            const btnEdit = document.getElementById('btnEdit');
+            const btnCreate = document.getElementById('btnCreate');
+            const btnDelete = document.getElementById('btnDelete');
+            const btnExport = document.getElementById('btnExport');
+            if(btnExport){ btnExport.onclick = async ()=>{
+                clearRowSelection();
+                const params = new URLSearchParams(window.location.search);
+                params.set('sort', transientFilter.sort !== null ? transientFilter.sort : (params.get('sort') || 'created_at'));
+                params.set('bid_status', transientFilter.bid_status !== null ? transientFilter.bid_status : (params.get('bid_status') || ''));
+                params.delete('page');
+                params.delete('v');
+                btnExport.disabled = true;
+                btnExport.setAttribute('aria-busy', 'true');
+                btnExport.title = '正在生成 PDF…';
+                showTip('正在生成 PDF，请稍候…');
+                try{
+                    const resp = await fetch(`/api/export_data?${params.toString()}`);
+                    if(!resp.ok || !resp.headers.get('Content-Type')?.includes('application/pdf')){
+                        throw new Error('导出失败，请确认已使用管理员账号登录、筛选结果非空且 PDF 服务正在运行');
+                    }
+                    const blob = await resp.blob();
+                    const downloadUrl = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = downloadUrl;
+                    link.download = `业务列表_${new Date().toLocaleDateString('sv-SE')}.pdf`;
+                    document.body.appendChild(link);
+                    link.click();
+                    link.remove();
+                    setTimeout(()=> URL.revokeObjectURL(downloadUrl), 60000);
+                    showTip('PDF 已生成，开始下载');
+                }catch(error){
+                    showTip(error.message || '导出失败，请稍后重试');
+                }finally{
+                    btnExport.disabled = false;
+                    btnExport.removeAttribute('aria-busy');
+                    btnExport.title = '导出';
+                }
+            }; }
+            if(btnView){ btnView.onclick = ()=>{ let id=getSelectedId(); if(!id && data[0]) id = data[0].id; clearRowSelection(); if(id) window.location.href = `/ui/business/${id}/detail`; else showTip(); }; }
+            if(btnEdit){ btnEdit.onclick = ()=>{ let id=getSelectedId(); if(!id && data[0]) id = data[0].id; clearRowSelection(); if(id) window.location.href = `/ui/business/${id}/edit`; else showTip(); }; }
+            if(btnCreate){ btnCreate.onclick = ()=>{ clearRowSelection(); window.location.href = `/ui/business/new`; }; }
+            if(btnDelete){ btnDelete.onclick = async ()=>{
+                const id=getSelectedId();
+                clearRowSelection();
+                if(!id){ showTip(); return; }
+                if(!confirm('确定要删除这个业务吗？此操作不可恢复。')) return;
+                try{
+                    const resp = await fetch(`/business/${id}/delete`, { method:'POST' });
+                    if(resp.ok){ await fetchPage(currentPage); await fetchStats(); }
+                }catch{}
+            }; }
+
+            // 搜索框对接后端：回车提交到 URL，并刷新第一页
+            const searchInput = document.getElementById('searchInput');
+            const searchIcon = document.getElementById('searchIcon');
+            if(searchInput){
+                // 初始值与 URL 同步
+                try{
+                    const url0 = new URL(window.location.href);
+                    const s0 = url0.searchParams.get('search') || '';
+                    if(s0) searchInput.value = s0;
+                }catch{}
+                // 初始化标题后缀
+                updateBizListSuffix();
+
+                searchInput.addEventListener('keydown', (e)=>{
+                    if(e.key === 'Enter'){
+                        const url = new URL(window.location.href);
+                        const val = (searchInput.value || '').trim();
+                        // 搜索独立：移除卡片筛选与排序前置条件
+                        url.searchParams.delete('bid_status');
+                        url.searchParams.delete('sort');
+                        if(val){ url.searchParams.set('search', val); }
+                        else{ url.searchParams.delete('search'); }
+                        history.replaceState({}, '', url.toString());
+                        currentPage = 1;
+                        fetchPage(currentPage);
+                        fetchStats();
+                        updateBizListSuffix();
+                    }
+                });
+            }
+            if(searchIcon && searchInput){
+                searchIcon.addEventListener('click', ()=>{
+                    const url = new URL(window.location.href);
+                    const val = (searchInput.value || '').trim();
+                    // 搜索独立：移除卡片筛选与排序前置条件
+                    url.searchParams.delete('bid_status');
+                    url.searchParams.delete('sort');
+                    if(val){ url.searchParams.set('search', val); }
+                    else{ url.searchParams.delete('search'); }
+                    history.replaceState({}, '', url.toString());
+                    currentPage = 1;
+                    fetchPage(currentPage);
+                    fetchStats();
+                    updateBizListSuffix();
+                });
+            }
+
+            // 表头排序事件（对接后端）：点击在 registration_time/bid_time 与默认 created_at 之间切换
+            const sortSignBtn = document.getElementById('sortSign');
+            const sortBidBtn  = document.getElementById('sortBidTime');
+            const sortSignIconGroup = document.getElementById('sortSignIconGroup');
+            const sortBidIconGroup  = document.getElementById('sortBidIconGroup');
+
+            function getSortKey(){
+                // 优先使用临时排序（卡片筛选/表头切换后存于内存），否则回退到 URL 参数
+                if (typeof transientFilter !== 'undefined' && transientFilter.sort !== null) {
+                    return transientFilter.sort || 'created_at';
+                }
+                const url = new URL(window.location.href);
+                return url.searchParams.get('sort') || 'created_at';
+            }
+
+            function setSortKey(key){
+                const url = new URL(window.location.href);
+                // 同步到临时排序，确保在卡片筛选后表头排序仍然生效
+                if (typeof transientFilter !== 'undefined') {
+                    transientFilter.sort = key || 'created_at';
+                }
+                // URL 仍然记录排序，便于复制链接，但不会影响"卡片筛选刷新回首页"的需求
+                if(key && key !== 'created_at') url.searchParams.set('sort', key); else url.searchParams.delete('sort');
+                history.replaceState({}, '', url.toString());
+                currentPage = 1;
+                fetchPage(currentPage);
+                updateSortUI();
+            }
+
+            function setFiltersAndFetch({ bid_status=null, sort=null }){
+                const url = new URL(window.location.href);
+                // 点击卡片筛选仅在内存生效，不写入URL；刷新即恢复初始
+                url.searchParams.delete('search');
+                transientFilter.bid_status = bid_status===null ? transientFilter.bid_status : (bid_status||'');
+                transientFilter.sort = sort===null ? transientFilter.sort : (sort||'created_at');
+                // 不修改 URL 中的 bid_status / sort
+                history.replaceState({}, '', url.toString());
+                currentPage = 1;
+                fetchPage(currentPage);
+                updateSortUI();
+            }
+
+            function updateSortUI(){
+                const k = getSortKey();
+                // 激活态：文字与图标高亮
+                if(sortSignBtn){
+                    if(k==='registration_time'){ sortSignBtn.classList.add('text-text-primary'); if(sortSignIconGroup) sortSignIconGroup.classList.add('text-text-primary'); }
+                    else { sortSignBtn.classList.remove('text-text-primary'); if(sortSignIconGroup) sortSignIconGroup.classList.remove('text-text-primary'); }
+                }
+                if(sortBidBtn){
+                    if(k==='bid_time'){ sortBidBtn.classList.add('text-text-primary'); if(sortBidIconGroup) sortBidIconGroup.classList.add('text-text-primary'); }
+                    else { sortBidBtn.classList.remove('text-text-primary'); if(sortBidIconGroup) sortBidIconGroup.classList.remove('text-text-primary'); }
+                }
+            }
+
+            sortSignBtn.addEventListener('click', ()=>{
+                const k = getSortKey();
+                setSortKey(k==='registration_time' ? 'created_at' : 'registration_time');
+            });
+            sortBidBtn.addEventListener('click', ()=>{
+                const k = getSortKey();
+                setSortKey(k==='bid_time' ? 'created_at' : 'bid_time');
+            });
+            updateSortUI();
+
+            // 卡片点击：筛选/排序
+            const cardTotal = document.getElementById('cardTotal');
+            const cardBidAll = document.getElementById('cardBidAll');
+            const cardWon = document.getElementById('cardWon');
+            const cardAmount = document.getElementById('cardAmount');
+
+            function activateMode(mode, cardEl){
+                viewState.mode = mode;
+                // 将卡片行为映射到后端筛选/排序参数
+                if(mode==='total'){
+                    setFiltersAndFetch({ bid_status: '', sort: 'created_at' });
+                } else if(mode==='bidAll'){
+                    // 包含 已投标/未中标/已中标
+                    setFiltersAndFetch({ bid_status: '已投标', sort: 'created_at' });
+                } else if(mode==='won'){
+                    setFiltersAndFetch({ bid_status: '已中标', sort: 'created_at' });
+                } else if(mode==='amount'){
+                    setFiltersAndFetch({ bid_status: '已中标', sort: 'amount_desc' });
+                }
+                // 仅对当前点击的卡片做动效
+                flashCard(cardEl);
+                cardEl.classList.add('card-jiggle');
+                setTimeout(()=> cardEl.classList.remove('card-jiggle'), 180);
+                // 图表根据当前模式联动更新
+                const map = { total: 'total', bidAll: 'bidAll', won: 'won', amount: 'amount' };
+                const key = map[mode];
+                if (key && charts[key]){
+                    charts[key].data.labels = last12WeekLabels;
+                    charts[key].data.datasets[0].data = (statsCache && statsCache.series) ? statsCache.series[key] : buildLast12WeeksSeries(key);
+                    charts[key].update();
+                }
+                // 更新"业务列表"后缀标题
+                updateBizListSuffix();
+            }
+
+            function updateBizListSuffix(){
+                const bizTitle = document.getElementById('bizListText');
+                const bizSuffix = document.getElementById('bizListSuffix');
+                if(!bizTitle || !bizSuffix) return;
+                const url = new URL(window.location.href);
+                const search = (url.searchParams.get('search')||'').trim();
+                const nameMap = { total: '全部', bidAll: '已投标+未中标+已中标', won: '已中标', amount: '中标金额' };
+                let suffix = '';
+                if(search){
+                    suffix = `（${search}）`;
+                } else {
+                    // 刷新后回到首页：不根据上次点击的卡片持久显示
+                    const mode = (typeof viewState!=='undefined' && viewState.mode) ? viewState.mode : 'none';
+                    if(nameMap[mode] && transientFilter.bid_status!==null) suffix = `（${nameMap[mode]}）`;
+                }
+                bizTitle.textContent = `业务列表`;
+                bizSuffix.textContent = suffix;
+            }
+
+            if(cardTotal){ cardTotal.addEventListener('click', ()=> activateMode('total', cardTotal)); }
+            if(cardBidAll){ cardBidAll.addEventListener('click', ()=> activateMode('bidAll', cardBidAll)); }
+            if(cardWon){ cardWon.addEventListener('click', ()=> activateMode('won', cardWon)); }
+            if(cardAmount){ cardAmount.addEventListener('click', ()=> activateMode('amount', cardAmount)); }
+
+            // 更新用户信息显示
+            async function updateUserInfo() {
+                try {
+                    // 从后端API获取用户头像
+                    const response = await fetch('/api/user/avatar');
+                    if (response.ok) {
+                        const data = await response.json();
+                        const avatarUrl = data.avatar_url || 'https://picsum.photos/id/1005/200/200';
+                        
+                        // 更新所有头像
+                        document.getElementById('userAvatar').src = avatarUrl;
+                        document.getElementById('dropdownAvatar').src = avatarUrl;
+                    }
+                } catch (error) {
+                    console.log('获取用户头像失败:', error);
+                }
+                
+                // 更新用户信息（这里可以从session或其他地方获取）
+                const username = '当前用户'; // 实际应该从session获取
+                const role = '管理员'; // 实际应该从session获取
+                
+                // 更新下拉菜单信息
+                document.getElementById('dropdownUsername').textContent = username;
+                document.getElementById('dropdownRole').textContent = role;
+            }
+            
+            // 直接初始化用户信息（避免在已加载后注册不到事件）
+            updateUserInfo();
+        });
+    </script>
+
+</body>
+</html>

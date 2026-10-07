@@ -1,0 +1,32 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Migrate inline <style type="text/tailwindcss"> from order-management.html */
+@layer utilities {
+  .content-auto { content-visibility: auto; }
+  .scrollbar-thin { scrollbar-width: thin; }
+  .scrollbar-thumb-rounded { scrollbar-color: rgba(156, 163, 175, 0.5) transparent; }
+  .hover-highlight { @apply transition-all duration-200 hover:bg-dark-200 rounded-md; }
+.stat-card { @apply bg-[#121314] rounded-lg p-4 border border-white/10 transition-all duration-300 hover:ring-1 hover:ring-primary/60 transform hover:-translate-y-1 hover:shadow-lg hover:shadow-black/30; }
+  .card-active { @apply ring-2 ring-primary; }
+  .card-flash { @apply ring-2 ring-primary; }
+  .card-jiggle { @apply -translate-y-1 ring-2 ring-primary shadow-lg shadow-black/30; }
+  .bizlist-active { @apply ring-1 ring-primary; }
+  .table-row-hover { @apply hover:bg-[#080808] transition-colors duration-200; user-select: none; }
+  .row-selected { @apply bg-[#080808]; }
+  /* 表格列分割线 */
+  .table-col-divide { @apply divide-x divide-white/12; }
+  .font-yahei { font-family: 'Microsoft YaHei', '微软雅黑', system-ui, sans-serif; }
+  .status-badge { @apply inline-flex items-center justify-center rounded whitespace-nowrap; min-width: 72px; height: 20px; padding: 0 8px; font-size: 12px; }
+.chip { @apply inline-flex items-center justify-center rounded border border-white/10 whitespace-nowrap text-xs px-2 py-0.5; }
+  .time-chip { min-width: 66px; text-align: center; }
+.dropdown-panel { @apply z-50 bg-[#0e0f11] border border-white/10 rounded shadow-lg transform transition ease-out duration-150 box-border; }
+  .dropdown-item { @apply px-3 py-1.5 hover:bg-dark-200 cursor-pointer text-xs whitespace-nowrap flex items-center justify-center text-center; }
+  .page-container { @apply max-w-[1200px] mx-auto w-full px-4 sm:px-5 md:px-6; }
+}
+
+@layer base {
+  body { @apply font-yahei; }
+}
+

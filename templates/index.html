@@ -1,0 +1,595 @@
+{% extends "base.html" %}
+
+{% block title %}业务列表 - 业务管理系统{% endblock %}
+
+{% block content %}
+<!-- KPI 区（符合主题：白卡片+浅描边+胶囊图标） -->
+<div class="row mb-4">
+  <div class="col-lg-3 col-md-6 mb-3">
+    <div class="card-soft kpi-card" onclick="refreshList()">
+      <div class="d-flex align-items-center gap-3">
+        <div class="stats-icon"><i class="fas fa-briefcase"></i></div>
+        <div>
+          <div class="stats-value">{{ total_businesses }}</div>
+          <div class="stats-label">总业务数量</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-3 col-md-6 mb-3">
+    <div class="card-soft kpi-card" onclick="showBidBusiness()">
+      <div class="d-flex align-items-center gap-3">
+        <div class="stats-icon"><i class="fas fa-paper-plane"></i></div>
+        <div>
+          <div class="stats-value">{{ bid_count }}</div>
+          <div class="stats-label">已投标项目</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-3 col-md-6 mb-3">
+    <div class="card-soft kpi-card" onclick="showWonBids()">
+      <div class="d-flex align-items-center gap-3">
+        <div class="stats-icon"><i class="fas fa-trophy"></i></div>
+        <div>
+          <div class="stats-value">{% for status, count in bid_status_counts %}{% if status == '已中标' %}{{ count }}{% endif %}{% endfor %}</div>
+          <div class="stats-label">已中标项目</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-3 col-md-6 mb-3">
+    <div class="card-soft kpi-card">
+      <div class="d-flex align-items-center gap-3">
+        <div class="stats-icon" style="background: var(--accent-10); color: var(--accent);"><i class="fas fa-yen-sign"></i></div>
+        <div>
+          <div class="stats-value">¥{{ total_amount|format_money }}</div>
+          <div class="stats-label">总中标金额</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 现代化工具栏（新增：视图切换、左侧筛选按钮、批量入口） -->
+<div class="card-soft toolbar-soft">
+  <div class="d-flex align-items-center gap-3 flex-wrap">
+    <h5 class="mb-0 text-secondary"><i class="fas fa-list me-2"></i>业务列表</h5>
+    <!-- 视图切换 segmented -->
+    <div class="segmented" role="tablist">
+        <button id="tab-table" class="active" onclick="switchView('table')"><i class="fas fa-table me-1"></i>表格</button>
+        <button id="tab-cards" onclick="switchView('cards')"><i class="fas fa-grid-2 me-1"></i>卡片</button>
+    </div>
+    <!-- 快速筛选Chips -->
+    <div class="d-flex gap-2 flex-wrap">
+      <span class="filter-chip {{ 'active' if not bid_status_filter else '' }}" onclick="filterByStatus('')">全部</span>
+      <span class="filter-chip {{ 'active' if bid_status_filter == '未报名' else '' }}" onclick="filterByStatus('未报名')">未报名</span>
+      <span class="filter-chip {{ 'active' if bid_status_filter == '已投标' else '' }}" onclick="filterByStatus('已投标')">已投标</span>
+      <span class="filter-chip {{ 'active' if bid_status_filter == '已中标' else '' }}" onclick="filterByStatus('已中标')">已中标</span>
+    </div>
+  </div>
+  <div class="d-flex align-items-center gap-2">
+    <button class="btn btn-ghost" data-bs-toggle="offcanvas" data-bs-target="#filterPanel"><i class="fas fa-sliders-h me-1"></i>筛选</button>
+    <select class="form-select form-select-sm" style="width: auto;" onchange="changeSortOrder(this.value)">
+      <option value="created_at" {{ 'selected' if sort_by == 'created_at' else '' }}>按录入时间排序</option>
+      <option value="registration_time" {{ 'selected' if sort_by == 'registration_time' else '' }}>按报名时间排序</option>
+      <option value="bid_time" {{ 'selected' if sort_by == 'bid_time' else '' }}>按投标时间排序</option>
+    </select>
+    <a href="{{ url_for('new_business') }}" class="btn btn-modern btn-modern-primary"><i class="fas fa-plus me-1"></i>新增业务</a>
+  </div>
+</div>
+
+<!-- 左侧筛选 Offcanvas -->
+<div class="offcanvas offcanvas-start soft-offcanvas" tabindex="-1" id="filterPanel">
+  <div class="offcanvas-header">
+    <h6 class="mb-0">筛选</h6>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
+  </div>
+  <div class="offcanvas-body">
+    <div class="mb-3">
+      <label class="form-label">投标状态</label>
+      <select class="form-select" onchange="filterByStatus(this.value)">
+        <option value="" {{ 'selected' if not bid_status_filter else '' }}>全部</option>
+        <option value="未报名" {{ 'selected' if bid_status_filter == '未报名' else '' }}>未报名</option>
+        <option value="已投标" {{ 'selected' if bid_status_filter == '已投标' else '' }}>已投标</option>
+        <option value="已中标" {{ 'selected' if bid_status_filter == '已中标' else '' }}>已中标</option>
+      </select>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">优先级</label>
+      <select class="form-select" onchange="filterByPriority(this.value)">
+        <option value="">全部</option>
+        <option value="低">低</option>
+        <option value="中">中</option>
+        <option value="高">高</option>
+      </select>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">客户单位包含</label>
+      <input type="text" class="form-control" id="filterCustomer" placeholder="关键词...">
+    </div>
+    <button class="btn btn-modern btn-modern-primary w-100" data-bs-dismiss="offcanvas" onclick="applyAdvancedFilters()">应用筛选</button>
+  </div>
+</div>
+
+<!-- 现代化业务列表（表格视图） -->
+<div class="card-soft" id="view-table">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="fas fa-list me-2"></i>业务列表</h5>
+        <a href="{{ url_for('new_business') }}" class="btn btn-primary btn-sm">
+            <i class="fas fa-plus me-1"></i>新增业务
+        </a>
+    </div>
+    {% if businesses.items %}
+        <div class="soft-table-wrap">
+            <table class="table table-soft table-sticky">
+                <thead>
+                    <tr>
+                        <th>业务名称</th>
+                        <th class="text-end">服务人数</th>
+                        <th class="text-end">招标金额</th>
+                        <th style="cursor: pointer;" onclick="sortBy('registration_time')" title="点击按报名时间排序">
+                            报名时间 <i class="fas fa-sort text-muted"></i>
+                        </th>
+                        <th style="cursor: pointer;" onclick="sortBy('bid_time')" title="点击按投标时间排序">
+                            投标时间 <i class="fas fa-sort text-muted"></i>
+                        </th>
+                        <th class="text-center">标书状态</th>
+                        <th class="text-center">投标状态</th>
+                        <th class="text-center">优先级</th>
+                        <th>录入时间</th>
+                        <th class="text-center">操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for business in businesses.items %}
+                    <tr class="fade-in">
+                        <td>
+                            <div class="fw-medium">
+                                {% if business.name|length > 25 %}
+                                    {{ business.name[:25] }}...
+                                {% else %}
+                                    {{ business.name }}
+                                {% endif %}
+                            </div>
+                            <small class="text-muted">{{ business.customer }}</small>
+                        </td>
+                        <td class="text-end">
+                            {% if business.service_people %}
+                                <span class="text-secondary">{{ business.service_people }}人</span>
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end">
+                            {% if business.bid_amount > 0 %}
+                                <span class="fw-semibold text-success">¥{{ business.bid_amount|format_money }}</span>
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% set reg_time = business.registration_time %}
+                            {% if reg_time and reg_time.tzinfo is none %}
+                                {% set reg_time = reg_time.replace(tzinfo=now.tzinfo) %}
+                            {% endif %}
+                            {% if reg_time %}
+                                <div class="text-secondary">{{ reg_time.strftime('%m-%d') }}</div>
+                                {% set reg_date = reg_time.date() %}
+                                {% set now_date = now.date() %}
+                                {% set days = (reg_date - now_date).days %}
+                                {% if days > 1 %}
+                                    <small class="badge bg-warning text-dark">剩余{{ days }}天</small>
+                                {% elif days == 1 %}
+                                    <small class="badge bg-danger">明天截止</small>
+                                {% elif days == 0 %}
+                                    <small class="badge bg-danger">今天截止</small>
+                                {% else %}
+                                    <small class="badge bg-secondary">已过期</small>
+                                {% endif %}
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% set b_time = business.bid_time %}
+                            {% if b_time and b_time.tzinfo is none %}
+                                {% set b_time = b_time.replace(tzinfo=now.tzinfo) %}
+                            {% endif %}
+                            {% if b_time %}
+                                <div class="text-secondary">{{ b_time.strftime('%m-%d') }}</div>
+                                {% set bid_date = b_time.date() %}
+                                {% set now_date = now.date() %}
+                                {% set days = (bid_date - now_date).days %}
+                                {% if days > 1 %}
+                                    <small class="badge bg-warning text-dark">剩余{{ days }}天</small>
+                                {% elif days == 1 %}
+                                    <small class="badge bg-danger">明天截止</small>
+                                {% elif days == 0 %}
+                                    <small class="badge bg-danger">今天截止</small>
+                                {% else %}
+                                    <small class="badge bg-secondary">已过期</small>
+                                {% endif %}
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            <select class="form-select form-select-sm status-select" 
+                                    data-business-id="{{ business.id }}" 
+                                    data-field="document_status"
+                                    style="width: auto; display: inline-block;">
+                                <option value="未获取" {{ 'selected' if business.document_status == '未获取' }}>未获取</option>
+                                <option value="已获取" {{ 'selected' if business.document_status == '已获取' }}>已获取</option>
+                            </select>
+                        </td>
+                        <td class="text-center">
+                            <select class="form-select form-select-sm status-select" 
+                                    data-business-id="{{ business.id }}" 
+                                    data-field="bid_status"
+                                    style="width: auto; display: inline-block;">
+                                <option value="未报名" {{ 'selected' if business.bid_status == '未报名' }}>未报名</option>
+                                <option value="已报名" {{ 'selected' if business.bid_status == '已报名' }}>已报名</option>
+                                <option value="未投标" {{ 'selected' if business.bid_status == '未投标' }}>未投标</option>
+                                <option value="已投标" {{ 'selected' if business.bid_status == '已投标' }}>已投标</option>
+                                <option value="未中标" {{ 'selected' if business.bid_status == '未中标' }}>未中标</option>
+                                <option value="已中标" {{ 'selected' if business.bid_status == '已中标' }}>已中标</option>
+                            </select>
+                        </td>
+                        <td class="text-center">
+                            <select class="form-select form-select-sm status-select" 
+                                    data-business-id="{{ business.id }}" 
+                                    data-field="priority"
+                                    style="width: auto; display: inline-block;">
+                                <option value="低" {{ 'selected' if business.priority == '低' }}>低</option>
+                                <option value="中" {{ 'selected' if business.priority == '中' }}>中</option>
+                                <option value="高" {{ 'selected' if business.priority == '高' }}>高</option>
+                            </select>
+                        </td>
+                        <td>
+                            <span class="text-secondary">{{ business.created_at.strftime('%m-%d') }}</span>
+                        </td>
+                        <td class="text-center">
+                            <div class="d-flex gap-1 justify-content-center">
+                                <a href="{{ url_for('view_business', id=business.id) }}" 
+                                   class="btn btn-modern btn-modern-ghost btn-sm" title="查看详情">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                                <a href="{{ url_for('edit_business', id=business.id) }}" 
+                                   class="btn btn-modern btn-modern-ghost btn-sm" title="编辑">
+                                    <i class="fas fa-edit"></i>
+                                </a>
+                                {% if current_user.is_authenticated and current_user.role == 'admin' %}
+                                <button type="button" class="btn btn-modern btn-modern-ghost btn-sm text-danger" 
+                                        onclick="deleteBusiness({{ business.id }})" title="删除">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+        </div>
+        
+        <!-- 分页 -->
+        {% if businesses.pages > 1 %}
+        <div class="d-flex justify-content-center mt-4">
+            <nav aria-label="业务列表分页">
+                <ul class="pagination">
+                    {% if businesses.has_prev %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('index', page=businesses.prev_num, search=search, sort=sort_by, bid_status=bid_status_filter) }}">
+                                <i class="fas fa-chevron-left"></i>
+                            </a>
+                        </li>
+                    {% endif %}
+                    
+                    {% for page_num in businesses.iter_pages() %}
+                        {% if page_num %}
+                            <li class="page-item {{ 'active' if page_num == businesses.page else '' }}">
+                                <a class="page-link" href="{{ url_for('index', page=page_num, search=search, sort=sort_by, bid_status=bid_status_filter) }}">
+                                    {{ page_num }}
+                                </a>
+                            </li>
+                        {% else %}
+                            <li class="page-item disabled"><span class="page-link">...</span></li>
+                        {% endif %}
+                    {% endfor %}
+                    
+                    {% if businesses.has_next %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('index', page=businesses.next_num, search=search, sort=sort_by, bid_status=bid_status_filter) }}">
+                                <i class="fas fa-chevron-right"></i>
+                            </a>
+                        </li>
+                    {% endif %}
+                </ul>
+            </nav>
+        </div>
+        {% endif %}
+    {% else %}
+        <div class="text-center py-5">
+            <div class="mb-4">
+                <i class="fas fa-inbox text-muted" style="font-size: 4rem;"></i>
+            </div>
+            <h5 class="text-muted mb-3">暂无业务数据</h5>
+            <p class="text-muted mb-4">点击下方"新增业务"按钮开始添加您的第一个业务</p>
+            <a href="{{ url_for('new_business') }}" class="btn btn-modern btn-modern-primary">
+                <i class="fas fa-plus me-2"></i>新增业务
+            </a>
+        </div>
+    {% endif %}
+</div>
+
+<!-- 卡片视图 -->
+<div class="modern-card d-none" id="view-cards">
+  {% if businesses.items %}
+  <div class="row g-3">
+    {% for business in businesses.items %}
+    <div class="col-xl-4 col-lg-6">
+      <div class="card-soft fade-in">
+        <div class="d-flex justify-content-between align-items-start mb-2">
+          <div class="me-2">
+            <div class="fw-semibold">{{ business.name }}</div>
+            <small class="text-muted">{{ business.customer }}</small>
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="toggleCardDetails(this)"><i class="fas fa-chevron-right chevron"></i></button>
+        </div>
+        <div class="d-flex justify-content-between mb-2">
+          <div class="text-secondary">服务人数</div>
+          <div class="fw-semibold">{{ business.service_people or '-' }}</div>
+        </div>
+        <div class="d-flex justify-content-between mb-2">
+          <div class="text-secondary">招标金额</div>
+          <div class="fw-semibold">{% if business.bid_amount>0 %}¥{{ business.bid_amount|format_money }}{% else %}-{% endif %}</div>
+        </div>
+        <div class="collapse">
+          <hr/>
+          <div class="row g-2">
+            <div class="col-6"><small class="text-secondary">报名时间</small><div>{{ business.registration_time and business.registration_time.strftime('%m-%d') or '-' }}</div></div>
+            <div class="col-6"><small class="text-secondary">投标时间</small><div>{{ business.bid_time and business.bid_time.strftime('%m-%d') or '-' }}</div></div>
+            <div class="col-6"><small class="text-secondary">标书状态</small>
+              <select class="form-select form-select-sm status-select" data-business-id="{{ business.id }}" data-field="document_status">
+                <option value="未获取" {{ 'selected' if business.document_status == '未获取' }}>未获取</option>
+                <option value="已获取" {{ 'selected' if business.document_status == '已获取' }}>已获取</option>
+              </select>
+            </div>
+            <div class="col-6"><small class="text-secondary">投标状态</small>
+              <select class="form-select form-select-sm status-select" data-business-id="{{ business.id }}" data-field="bid_status">
+                <option value="未报名" {{ 'selected' if business.bid_status == '未报名' }}>未报名</option>
+                <option value="已报名" {{ 'selected' if business.bid_status == '已报名' }}>已报名</option>
+                <option value="未投标" {{ 'selected' if business.bid_status == '未投标' }}>未投标</option>
+                <option value="已投标" {{ 'selected' if business.bid_status == '已投标' }}>已投标</option>
+                <option value="未中标" {{ 'selected' if business.bid_status == '未中标' }}>未中标</option>
+                <option value="已中标" {{ 'selected' if business.bid_status == '已中标' }}>已中标</option>
+              </select>
+            </div>
+          </div>
+          <div class="d-flex gap-2 mt-3">
+            <a href="{{ url_for('view_business', id=business.id) }}" class="btn btn-ghost btn-sm"><i class="fas fa-eye me-1"></i>查看</a>
+            <a href="{{ url_for('edit_business', id=business.id) }}" class="btn btn-ghost btn-sm"><i class="fas fa-edit me-1"></i>编辑</a>
+            {% if current_user.is_authenticated and current_user.role == 'admin' %}
+            <button class="btn btn-ghost btn-sm text-danger" onclick="deleteBusiness({{ business.id }})"><i class="fas fa-trash me-1"></i>删除</button>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="text-center py-5">
+    <i class="fas fa-inbox text-muted" style="font-size: 4rem;"></i>
+    <p class="text-muted">暂无业务数据</p>
+  </div>
+  {% endif %}
+</div>
+
+<script>
+// 删除业务
+function deleteBusiness(businessId) {
+    if (confirm('确定要删除这个业务吗？此操作不可恢复。')) {
+        fetch(`/business/${businessId}/delete`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        }).then(response => {
+            if (response.ok) {
+                window.location.reload();
+            }
+        });
+    }
+}
+
+// 刷新列表
+function refreshList() {
+    window.location.href = '/';
+}
+
+// 显示已投标业务
+function showBidBusiness() {
+    window.location.href = '/?bid_status=已投标';
+}
+
+// 显示已中标业务
+function showWonBids() {
+    window.location.href = '/?bid_status=已中标';
+}
+
+// 筛选状态
+function filterByStatus(status) {
+    const currentUrl = new URL(window.location);
+    if (status) {
+        currentUrl.searchParams.set('bid_status', status);
+    } else {
+        currentUrl.searchParams.delete('bid_status');
+    }
+    currentUrl.searchParams.set('page', '1'); // 重置到第一页
+    window.location.href = currentUrl.toString();
+}
+
+// 改变排序
+function changeSortOrder(sortField) {
+    const currentUrl = new URL(window.location);
+    currentUrl.searchParams.set('sort', sortField);
+    currentUrl.searchParams.set('page', '1'); // 重置到第一页
+    window.location.href = currentUrl.toString();
+}
+
+// 高级筛选（示例：客户关键词 + 优先级）
+function applyAdvancedFilters() {
+    const currentUrl = new URL(window.location);
+    const priority = document.querySelector('#filterPanel select[onchange^="filterByPriority" ]')?.value || '';
+    const customer = document.getElementById('filterCustomer')?.value?.trim() || '';
+    if (priority) currentUrl.searchParams.set('priority', priority); else currentUrl.searchParams.delete('priority');
+    if (customer) currentUrl.searchParams.set('customer', customer); else currentUrl.searchParams.delete('customer');
+    currentUrl.searchParams.set('page', '1');
+    window.location.href = currentUrl.toString();
+}
+
+function filterByPriority(value){
+    const currentUrl = new URL(window.location);
+    if (value) currentUrl.searchParams.set('priority', value); else currentUrl.searchParams.delete('priority');
+    currentUrl.searchParams.set('page','1');
+    window.location.href = currentUrl.toString();
+}
+
+// 视图切换
+function switchView(view){
+    const table = document.getElementById('view-table');
+    const cards = document.getElementById('view-cards');
+    document.getElementById('tab-table').classList.toggle('active', view==='table');
+    document.getElementById('tab-cards').classList.toggle('active', view==='cards');
+    if(view==='table'){ cards.classList.add('d-none'); table.classList.remove('d-none'); }
+    else { table.classList.add('d-none'); cards.classList.remove('d-none'); }
+}
+
+// 卡片展开
+function toggleCardDetails(btn){
+    const chevron = btn.querySelector('.chevron');
+    const collapse = btn.closest('.card-soft').querySelector('.collapse');
+    if (collapse.classList.contains('show')){ collapse.classList.remove('show'); chevron.classList.remove('rotate'); }
+    else { collapse.classList.add('show'); chevron.classList.add('rotate'); }
+}
+
+// 内联状态更新
+document.addEventListener('DOMContentLoaded', function() {
+    const statusSelects = document.querySelectorAll('.status-select');
+    
+    statusSelects.forEach(select => {
+        select.addEventListener('change', function() {
+            const businessId = this.getAttribute('data-business-id');
+            const field = this.getAttribute('data-field');
+            const newValue = this.value;
+            
+            // 显示加载状态
+            const originalValue = this.value;
+            this.disabled = true;
+            
+            fetch('/api/update_status', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    business_id: businessId,
+                    field_name: field,
+                    new_value: newValue,
+                    // 不再自动生成备注
+                    // 更新人由服务端写入当前登录用户
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // 成功提示
+                    showToast('状态更新成功', 'success');
+                    
+                    // 实时更新统计卡片
+                    if (data.stats) {
+                        updateStatsCards(data.stats);
+                    }
+                    
+                    // 如果是投标状态更改，保持当前排序刷新页面
+                    if (field === 'bid_status') {
+                        setTimeout(() => {
+                            const currentUrl = new URL(window.location);
+                            window.location.href = currentUrl.toString();
+                        }, 1000);
+                    }
+                } else {
+                    // 恢复原值
+                    this.value = originalValue;
+                    showToast('状态更新失败', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                this.value = originalValue;
+                showToast('状态更新失败', 'error');
+            })
+            .finally(() => {
+                this.disabled = false;
+            });
+        });
+    });
+});
+
+// 更新统计卡片
+function updateStatsCards(stats) {
+    // 更新总业务数量
+    const totalBusinessCard = document.querySelector('.stats-card:nth-child(1) h3');
+    if (totalBusinessCard) {
+        totalBusinessCard.textContent = stats.total_businesses;
+    }
+    
+    // 更新已投标数量
+    const bidCountCard = document.querySelector('.stats-card:nth-child(2) h3');
+    if (bidCountCard && stats.bid_count !== undefined) {
+        bidCountCard.textContent = stats.bid_count;
+    }
+    
+    // 更新已中标数量
+    const wonCountCard = document.querySelector('.stats-card:nth-child(3) h3');
+    if (wonCountCard) {
+        wonCountCard.textContent = stats.won_count;
+    }
+    
+    // 更新总中标金额
+    const totalAmountCard = document.querySelector('.stats-card:nth-child(4) h3');
+    if (totalAmountCard) {
+        // 格式化金额显示
+        const formattedAmount = new Intl.NumberFormat('zh-CN').format(stats.total_won_amount);
+        totalAmountCard.innerHTML = `¥${formattedAmount}`;
+    }
+}
+
+// 排序功能
+function sortBy(sortField) {
+    const currentUrl = new URL(window.location);
+    currentUrl.searchParams.set('sort', sortField);
+    currentUrl.searchParams.set('page', '1'); // 重置到第一页
+    window.location.href = currentUrl.toString();
+}
+
+// 显示提示消息
+function showToast(message, type) {
+    const toast = document.createElement('div');
+    toast.className = `alert alert-${type === 'success' ? 'success' : 'danger'} alert-dismissible fade show position-fixed`;
+    toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 200px;';
+    toast.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    document.body.appendChild(toast);
+    
+    // 3秒后自动消失
+    setTimeout(() => {
+        toast.remove();
+    }, 3000);
+}
+</script>
+{% endblock %} 

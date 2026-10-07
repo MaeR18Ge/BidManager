@@ -1,0 +1,239 @@
+{% extends "base.html" %}
+
+{% block title %}{{ '编辑业务' if business else '新增业务' }} - 业务管理系统{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-10">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-{{ 'edit' if business else 'plus' }} me-2"></i>
+                    {{ '编辑业务信息' if business else '新增业务信息' }}
+                </h5>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    <!-- 基本信息 -->
+                    <h6 class="text-muted mb-3 section-header"><i class="fas fa-info-circle me-2 icon-blue"></i>基本信息</h6>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="name" class="form-label">业务名称 <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="name" name="name" 
+                                   value="{{ business.name if business else '' }}" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="customer" class="form-label">客户单位 <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="customer" name="customer" 
+                                   value="{{ business.customer if business else '' }}" required>
+                        </div>
+                    </div>
+
+                    <!-- 投标联系人 -->
+                    <h6 class="text-muted mb-3 mt-4 section-header"><i class="fas fa-user me-2 icon-green"></i>投标联系人</h6>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="bid_contact_name" class="form-label">投标联系人姓名</label>
+                            <input type="text" class="form-control" id="bid_contact_name" name="bid_contact_name" 
+                                   value="{{ business.bid_contact_name if business else '' }}">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="bid_contact_phone" class="form-label">投标联系人电话</label>
+                            <input type="tel" class="form-control" id="bid_contact_phone" name="bid_contact_phone" 
+                                   value="{{ business.bid_contact_phone if business else '' }}">
+                        </div>
+                    </div>
+
+                    <!-- 客户联系人 -->
+                    <h6 class="text-muted mb-3 mt-4 section-header"><i class="fas fa-user me-2 icon-cyan"></i>客户联系人</h6>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="customer_contact_name" class="form-label">客户联系人姓名</label>
+                            <input type="text" class="form-control" id="customer_contact_name" name="customer_contact_name" 
+                                   value="{{ business.customer_contact_name if business else '' }}">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="customer_contact_phone" class="form-label">客户联系人电话</label>
+                            <input type="tel" class="form-control" id="customer_contact_phone" name="customer_contact_phone" 
+                                   value="{{ business.customer_contact_phone if business else '' }}">
+                        </div>
+                    </div>
+
+                    <!-- 业务信息 -->
+                    <h6 class="text-muted mb-3 mt-4 section-header"><i class="fas fa-briefcase me-2 icon-red"></i>业务信息</h6>
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label for="bid_amount" class="form-label">招标金额</label>
+                            <input type="number" class="form-control" id="bid_amount" name="bid_amount" step="0.01" 
+                                   value="{{ business.bid_amount if business else '' }}" placeholder="请输入招标金额">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="service_people" class="form-label">服务人数</label>
+                            <input type="number" class="form-control" id="service_people" name="service_people" 
+                                   value="{{ business.service_people if business else '' }}">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="priority" class="form-label">优先级</label>
+                            <select class="form-select" id="priority" name="priority">
+                                <option value="低" {{ 'selected' if business and business.priority == '低' else '' }}>低</option>
+                                <option value="中" {{ 'selected' if business and business.priority == '中' else '' }}>中</option>
+                                <option value="高" {{ 'selected' if business and business.priority == '高' else '' }}>高</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-12 mb-3">
+                            <label for="document_url" class="form-label">标书获取地址</label>
+                            <input type="url" class="form-control" id="document_url" name="document_url" 
+                                   value="{{ business.document_url if business else '' }}" 
+                                   placeholder="请输入标书下载或查看的网址">
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-12 mb-3">
+                            <label for="service_content" class="form-label">服务内容</label>
+                            <textarea class="form-control" id="service_content" name="service_content" rows="3" 
+                                      placeholder="请详细描述服务内容...">{{ business.service_content if business else '' }}</textarea>
+                        </div>
+                        <div class="col-md-12 mb-3">
+                            <label for="previous_suppliers" class="form-label">过往服务商</label>
+                            <input type="text" class="form-control" id="previous_suppliers" name="previous_suppliers" 
+                                   value="{{ business.previous_suppliers if business and business.previous_suppliers is defined else '' }}" placeholder="请输入过往服务商名称，可用逗号分隔多个">
+                        </div>
+                    </div>
+
+                    <!-- 时间信息 -->
+                    <h6 class="text-muted mb-3 mt-4 section-header"><i class="fas fa-calendar me-2 icon-orange"></i>时间信息</h6>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="registration_time" class="form-label">报名时间</label>
+                            <input type="date" class="form-control" id="registration_time" name="registration_time" 
+                                   value="{{ business.registration_time.strftime('%Y-%m-%d') if business and business.registration_time else '' }}">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="bid_time" class="form-label">投标时间</label>
+                            <input type="date" class="form-control" id="bid_time" name="bid_time" 
+                                   value="{{ business.bid_time.strftime('%Y-%m-%d') if business and business.bid_time else '' }}">
+                        </div>
+                    </div>
+
+                    <!-- 状态信息 -->
+                    <h6 class="text-muted mb-3 mt-4 section-header"><i class="fas fa-flag me-2 icon-purple"></i>状态信息</h6>
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label for="document_status" class="form-label">标书状态</label>
+                            <select class="form-select" id="document_status" name="document_status">
+                                <option value="未获取" {{ 'selected' if business and business.document_status == '未获取' else '' }}>未获取</option>
+                                <option value="已获取" {{ 'selected' if business and business.document_status == '已获取' else '' }}>已获取</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="bid_status" class="form-label">投标状态</label>
+                            <select class="form-select" id="bid_status" name="bid_status">
+                                <option value="未报名" {{ 'selected' if business and business.bid_status == '未报名' else '' }}>未报名</option>
+                                <option value="已报名" {{ 'selected' if business and business.bid_status == '已报名' else '' }}>已报名</option>
+                                <option value="未投标" {{ 'selected' if business and business.bid_status == '未投标' else '' }}>未投标</option>
+                                <option value="已投标" {{ 'selected' if business and business.bid_status == '已投标' else '' }}>已投标</option>
+                                <option value="未中标" {{ 'selected' if business and business.bid_status == '未中标' else '' }}>未中标</option>
+                                <option value="已中标" {{ 'selected' if business and business.bid_status == '已中标' else '' }}>已中标</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="payment_status" class="form-label">收款情况</label>
+                            <select class="form-select" id="payment_status" name="payment_status">
+                                <option value="" {{ 'selected' if not business or not business.payment_status else '' }}>请选择收款情况</option>
+                                <option value="未收款" {{ 'selected' if business and business.payment_status == '未收款' else '' }}>未收款</option>
+                                <option value="部分收款" {{ 'selected' if business and business.payment_status == '部分收款' else '' }}>部分收款</option>
+                                <option value="已收款" {{ 'selected' if business and business.payment_status == '已收款' else '' }}>已收款</option>
+                                <option value="延期收款" {{ 'selected' if business and business.payment_status == '延期收款' else '' }}>延期收款</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- 系统信息 -->
+                    <h6 class="text-muted mb-3 mt-4 section-header"><i class="fas fa-user-shield me-2 icon-magenta"></i>系统信息</h6>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">录入时间</label>
+                            <input type="text" class="form-control" value="{{ business.created_at.strftime('%Y-%m-%d %H:%M') if business else '' }}" readonly>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">最后更新人</label>
+                            <input type="text" class="form-control" value="{{ business.updated_by if business else (current_user.username if current_user.is_authenticated else '-') }}" readonly>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="notes" class="form-label">备注信息</label>
+                        <textarea class="form-control" id="notes" name="notes" rows="3" 
+                                  placeholder="添加备注信息...">{{ business.notes if business else '' }}</textarea>
+                    </div>
+
+                    {% if business %}
+                    <div class="mb-3">
+                        <label for="change_notes" class="form-label">变更备注</label>
+                        <textarea class="form-control" id="change_notes" name="change_notes" rows="2" 
+                                  placeholder="如果信息发生变化，请添加备注说明..."></textarea>
+                    </div>
+                    {% endif %}
+
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('index') }}" class="btn btn-secondary">
+                            <i class="fas fa-arrow-left me-1"></i>返回列表
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save me-1"></i>{{ '更新业务' if business else '保存业务' }}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// 表单验证
+document.querySelector('form').addEventListener('submit', function(e) {
+    const name = document.getElementById('name').value.trim();
+    const customer = document.getElementById('customer').value.trim();
+    
+    if (!name) {
+        e.preventDefault();
+        alert('请输入业务名称');
+        document.getElementById('name').focus();
+        return false;
+    }
+    
+    if (!customer) {
+        e.preventDefault();
+        alert('请输入客户单位');
+        document.getElementById('customer').focus();
+        return false;
+    }
+});
+
+// 状态变更时显示备注输入框
+document.getElementById('bid_status').addEventListener('change', function() {
+    const changeNotes = document.getElementById('change_notes');
+    if (changeNotes) {
+        changeNotes.style.display = 'block';
+    }
+});
+
+document.getElementById('document_status').addEventListener('change', function() {
+    const changeNotes = document.getElementById('change_notes');
+    if (changeNotes) {
+        changeNotes.style.display = 'block';
+    }
+});
+
+document.getElementById('payment_status').addEventListener('change', function() {
+    const changeNotes = document.getElementById('change_notes');
+    if (changeNotes) {
+        changeNotes.style.display = 'block';
+    }
+});
+</script>
+{% endblock %} 
