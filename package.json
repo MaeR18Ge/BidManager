@@ -1,8 +1,8 @@
 {
-  "name": "businessmt",
+  "name": "bidmanager",
   "private": true,
-  "version": "1.0.0",
-  "description": "BusinessMT tooling (Tailwind build + optional PDF server)",
+  "version": "1.1.0",
+  "description": "BidManager bid management system: responsive UI and PDF export",
   "main": "pdf-server.js",
   "scripts": {
     "build:css": "npx tailwindcss -c tailwind.config.js -i ./static/tailwind/input.css -o ./static/tailwind/output.css --minify",

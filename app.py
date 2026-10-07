@@ -902,7 +902,9 @@ def ui_business_detail(id: int):
 @login_required
 def api_listing():
     page = request.args.get('page', 1, type=int)
-    per_page = 10
+    per_page = request.args.get('per_page', 10, type=int)
+    if per_page not in (10, 20, 50):
+        per_page = 10
     search = request.args.get('search', '')
     bid_status_filter = request.args.get('bid_status', '')
     sort_by = request.args.get('sort', 'created_at')
@@ -1150,22 +1152,30 @@ def delete_business(id):
 @app.route('/api/export_data')
 @login_required
 def export_data():
-    """导出当前页面业务数据为PDF文件"""
+    """导出选中的业务；未提供选中 ID 时导出全部业务。"""
     try:
         # 仅管理员可导出
         if not (hasattr(current_user, 'role') and current_user.role == 'admin'):
             flash('无权限导出PDF', 'error')
             return redirect(url_for('index'))
-        # 获取筛选参数（与index页面保持一致）
-        search = request.args.get('search', '')
+        # 导出范围独立于列表搜索和状态筛选。
+        search = ''
         sort_by = request.args.get('sort', 'created_at')
-        bid_status_filter = request.args.get('bid_status', '')
+        bid_status_filter = ''
         page = request.args.get('page', 1, type=int)
         per_page = 10  # 与页面分页保持一致
         exporter = current_user.username if current_user.is_authenticated else '系统'
         
         # 构建查询
         query = Business.query
+        if 'ids' in request.args:
+            try:
+                selected_ids = {int(value) for value in request.args['ids'].split(',')}
+                if not selected_ids or any(value <= 0 for value in selected_ids):
+                    raise ValueError
+            except ValueError:
+                return jsonify({'success': False, 'message': '无效的业务 ID'}), 400
+            query = query.filter(Business.id.in_(selected_ids))
         
         # 搜索筛选 - 与index页面保持一致
         if search:

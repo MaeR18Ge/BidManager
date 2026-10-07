@@ -18,7 +18,7 @@ app.get('/', (req, res) => {
     res.json({
         status: 'OK',
         service: 'PDF Export Service',
-        version: '1.0.0',
+        version: require('./package.json').version,
         endpoints: {
             'GET /': 'Service status (this page)',
             'GET /health': 'Health check',
@@ -153,4 +153,4 @@ app.listen(PORT, () => {
     console.log(`PDF Export Server running on port ${PORT}`);
     console.log(`Service status: http://localhost:${PORT}/`);
     console.log(`Health check: http://localhost:${PORT}/health`);
-}); 
+});

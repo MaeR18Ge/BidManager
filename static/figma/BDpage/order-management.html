@@ -183,6 +183,24 @@
         .business-table th,
         .business-table td { white-space: nowrap; padding-left: clamp(4px, .7vw, 12px); padding-right: clamp(4px, .7vw, 12px); }
         main { min-width: 0; }
+        #exportAllDialog {
+            width: min(420px, calc(100vw - 32px)); padding: 24px;
+            margin: auto; border: 1px solid #484848; border-radius: 12px;
+            background: #242424; color: #f3f4f6;
+            box-shadow: 0 20px 60px rgba(0,0,0,.45);
+        }
+        #exportAllDialog::backdrop { background: rgba(0,0,0,.6); }
+        #exportAllDialog h2 { font-size: 18px; font-weight: 600; margin-bottom: 12px; }
+        #exportAllDialog p { color: #9ca3af; font-size: 14px; line-height: 1.7; }
+        #exportAllDialog .dialog-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px; }
+        #exportAllDialog button { border-radius: 6px; padding: 8px 20px; font-size: 14px; border: 1px solid #484848; }
+        #exportAllCancel { background: #242424; color: #9ca3af; }
+        #exportAllExecute { background: #7c3aed; color: #fff; border-color: #7c3aed !important; }
+        #exportAllDialog button:focus-visible { outline: 2px solid #a78bfa; outline-offset: 3px; }
+        #exportAllCancel:hover { background: #303030; color: #f3f4f6; }
+        #exportAllExecute:hover { background: #6d28d9; }
+        .business-table tr.row-selected,
+        .business-table tr.row-selected:hover { background-color: #080808 !important; }
         .business-table { table-layout: fixed; width: 100%; }
         .business-table td:first-child .sf-cell,
         .business-table td:first-child .sf-anim {
@@ -425,7 +443,7 @@
                             <button id="btnDelete" class="bg-[#242424] border border-dark-100 rounded-md w-[34px] h-[34px] text-sm text-text-secondary hover:text-text-primary hover:ring-1 hover:ring-primary focus:outline-none focus:ring-1 focus:ring-primary flex items-center justify-center" title="删除">
                                 <i class="bi bi-trash"></i>
                             </button>
-                            <button id="btnExport" class="bg-[#242424] border border-dark-100 rounded-md w-[34px] h-[34px] text-sm text-text-secondary hover:text-text-primary hover:ring-1 hover:ring-primary focus:outline-none focus:ring-1 focus:ring-primary flex items-center justify-center" title="导出">
+                            <button id="btnExport" class="bg-[#242424] border border-dark-100 rounded-md w-[34px] h-[34px] text-sm text-text-secondary hover:text-text-primary hover:ring-1 hover:ring-primary focus:outline-none focus:ring-1 focus:ring-primary flex items-center justify-center" title="导出 PDF：选中业务时仅导出选中项；未选中时导出全部业务" aria-label="导出 PDF：选中业务时仅导出选中项；未选中时导出全部业务">
                                 <i class="bi bi-download"></i>
                             </button>
                             <button id="btnCreate" class="bg-primary hover:bg-primary/90 text-white px-3 py-1.5 h-[34px] rounded-md text-sm font-medium transition-colors flex items-center">
@@ -493,9 +511,16 @@
                 </div>
                 
                 <!-- 翻页 -->
-                <div class="flex items-center justify-between px-4 py-3 border-t border-[#484848] text-sm">
-                    <div id="paginationInfo" class="text-text-secondary">Showing 1–10 of 50</div>
+                <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-t border-[#484848] text-sm">
                     <div class="flex items-center gap-2">
+                        <div id="paginationInfo" class="text-text-secondary">Showing 1–10 of 50</div>
+                        <select id="pageSize" class="bg-[#242424] text-text-primary border border-[#484848] rounded px-2 py-1" aria-label="每页显示业务数量">
+                            <option value="10">10</option>
+                            <option value="20">20</option>
+                            <option value="50">50</option>
+                        </select>
+                    </div>
+                    <div class="flex flex-wrap items-center justify-end gap-2">
                         <button id="prevPage" class="w-[34px] h-[34px] rounded-md border-0 bg-transparent text-text-secondary hover:text-text-primary disabled:opacity-50 flex items-center justify-center">
                             <i class="bi bi-chevron-left text-[14px]"></i>
                         </button>
@@ -510,6 +535,15 @@
             </div>
         </div>
     </main>
+
+    <dialog id="exportAllDialog" aria-labelledby="exportAllTitle" aria-describedby="exportAllDescription">
+        <h2 id="exportAllTitle">导出全部业务</h2>
+        <p id="exportAllDescription">未选中任何业务。执行后将导出全部业务内容，不受当前分页、搜索或筛选条件限制。</p>
+        <div class="dialog-actions">
+            <button type="button" id="exportAllCancel" autofocus>放弃</button>
+            <button type="button" id="exportAllExecute">执行</button>
+        </div>
+    </dialog>
 
     <script>
         // 图表配置
@@ -720,12 +754,25 @@
             function tag(text, cls){ return `<span class="status-badge ${cls}">${text}</span>`; }
 
             let totalItems = 0;
-            const pageSize = 10;
+            let pageSize = 10;
+            const pageSizeSelect = document.getElementById('pageSize');
+            const initialPageSize = Number(new URLSearchParams(window.location.search).get('per_page'));
+            if([10, 20, 50].includes(initialPageSize)) pageSize = initialPageSize;
+            pageSizeSelect.value = String(pageSize);
             let currentPage = 1;
-            let selectedBusinessId = null; // 按业务 ID 保留选中状态，避免跨页选错行
+            const selectedBusinessIds = new Set();
+            let selectionAnchorId = null;
+            function updateRowSelection(){
+                tableBody.querySelectorAll('tr[data-row-index]').forEach(row => {
+                    const id = data[Number(row.dataset.rowIndex)]?.id;
+                    row.classList.toggle('row-selected', selectedBusinessIds.has(id));
+                    row.setAttribute('aria-selected', String(selectedBusinessIds.has(id)));
+                });
+            }
             function clearRowSelection(){
-                selectedBusinessId = null;
-                tableBody.querySelectorAll('tr.row-selected').forEach(row => row.classList.remove('row-selected'));
+                selectedBusinessIds.clear();
+                selectionAnchorId = null;
+                updateRowSelection();
             }
             // 视图状态：none 默认、total 总览排序、bidAll 三类、won 中标、amount 中标金额排序
             let viewState = { mode: 'none' };
@@ -771,7 +818,7 @@
                 const urlBidStatus = url.searchParams.get('bid_status')||'';
                 const effSort = transientFilter.sort !== null ? transientFilter.sort : urlSort;
                 const effBidStatus = transientFilter.bid_status !== null ? transientFilter.bid_status : urlBidStatus;
-                const resp = await fetch(`/api/listing?page=${page}&search=${encodeURIComponent(search)}&sort=${encodeURIComponent(effSort)}&bid_status=${encodeURIComponent(effBidStatus)}&_=${Date.now()}`);
+                const resp = await fetch(`/api/listing?page=${page}&per_page=${pageSize}&search=${encodeURIComponent(search)}&sort=${encodeURIComponent(effSort)}&bid_status=${encodeURIComponent(effBidStatus)}&_=${Date.now()}`);
                 const json = await resp.json();
                 totalItems = json.total;
                 data = json.items.map(r=>{
@@ -1050,7 +1097,7 @@
 
                 tableBody.innerHTML = slice.map((row, i)=>{
                     const originalIndex = data.indexOf(row); // 保持与原始数据索引对应
-                    const isSelected = selectedBusinessId === row.id;
+                    const isSelected = selectedBusinessIds.has(row.id);
                     // 预先构造单元格文本，便于包裹动画容器
                     const cellTexts = {
                         p: row.p,
@@ -1137,16 +1184,37 @@
                         const target = e.target;
                         if (target.closest('button.chip') || target.closest('[data-dropdown]')) return;
                         const idx = parseInt(tr.getAttribute('data-row-index'));
-                        selectedBusinessId = data[idx].id;
-                        tableBody.querySelectorAll('tr.row-selected').forEach(r => r.classList.remove('row-selected'));
-                        tr.classList.add('row-selected');
+                        const id = data[idx].id;
+                        const additive = e.ctrlKey || e.metaKey;
+                        const anchorIndex = slice.findIndex(row => row.id === selectionAnchorId);
+                        const clickedIndex = slice.findIndex(row => row.id === id);
+                        if(e.shiftKey && anchorIndex >= 0){
+                            if(!additive) selectedBusinessIds.clear();
+                            const from = Math.min(anchorIndex, clickedIndex);
+                            const to = Math.max(anchorIndex, clickedIndex);
+                            slice.slice(from, to + 1).forEach(row => selectedBusinessIds.add(row.id));
+                        }else if(additive){
+                            if(selectedBusinessIds.has(id)) selectedBusinessIds.delete(id);
+                            else selectedBusinessIds.add(id);
+                            selectionAnchorId = id;
+                        }else{
+                            if(selectedBusinessIds.has(id)){
+                                selectedBusinessIds.delete(id);
+                                if(selectionAnchorId === id) selectionAnchorId = null;
+                            }else{
+                                selectedBusinessIds.clear();
+                                selectedBusinessIds.add(id);
+                                selectionAnchorId = id;
+                            }
+                        }
+                        updateRowSelection();
                     });
                 });
 
                 const totalPages = Math.ceil(totalItems/pageSize);
-                paginationInfo.textContent = `Showing ${(start+1)}–${Math.min(start+pageSize,totalItems)} of ${totalItems}`;
+                paginationInfo.textContent = `Showing ${totalItems ? start+1 : 0}–${Math.min(start+pageSize,totalItems)} of ${totalItems}`;
                 prevBtn.disabled = page===1;
-                nextBtn.disabled = page===totalPages;
+                nextBtn.disabled = page>=totalPages;
 
                 // 页码渲染（最多显示5个窗口）
                 const windowSize = 5;
@@ -1311,12 +1379,23 @@
             }
 
             // 点击页面其他区域关闭所有下拉
-            document.addEventListener('click', () => {
+            document.addEventListener('click', (event) => {
+                if(!event.target.closest('.business-table, button, a, input, select, textarea, label, dialog, [data-dropdown], .stat-card')){
+                    clearRowSelection();
+                }
                 document.querySelectorAll('[data-dropdown]').forEach(el=> el.classList.add('hidden'));
             });
 
             prevBtn.addEventListener('click', ()=>{ if(currentPage>1){ currentPage--; fetchPage(currentPage, true);} });
             nextBtn.addEventListener('click', ()=>{ currentPage++; fetchPage(currentPage, true);} );
+            pageSizeSelect.addEventListener('change', ()=>{
+                pageSize = Number(pageSizeSelect.value);
+                const url = new URL(window.location.href);
+                url.searchParams.set('per_page', String(pageSize));
+                history.replaceState({}, '', url.toString());
+                currentPage = 1;
+                fetchPage(currentPage, true);
+            });
 
             fetchPage(currentPage);
             fetchStats();
@@ -1326,12 +1405,14 @@
 
             // 工具栏操作使用所选业务的 ID，不受当前页行位置影响。
             function getSelectedId(){
-                return selectedBusinessId;
+                if(selectedBusinessIds.size === 0){ showTip(); return null; }
+                if(selectedBusinessIds.size > 1){ showTip('查看或编辑时，请只选择一条业务'); return null; }
+                return selectedBusinessIds.values().next().value;
             }
             function showTip(msg){
                 try{
                     const tip = document.createElement('div');
-                    tip.textContent = msg || '请先在表格中选择一行';
+                    tip.textContent = msg || '请先选择业务';
                     tip.style.position = 'fixed';
                     tip.style.top = '20px';
                     tip.style.right = '20px';
@@ -1349,17 +1430,34 @@
             const btnCreate = document.getElementById('btnCreate');
             const btnDelete = document.getElementById('btnDelete');
             const btnExport = document.getElementById('btnExport');
+            function confirmExportAll(){
+                const dialog = document.getElementById('exportAllDialog');
+                return new Promise(resolve => {
+                    dialog.returnValue = '';
+                    dialog.addEventListener('close', ()=>resolve(dialog.returnValue === 'execute'), {once: true});
+                    document.getElementById('exportAllCancel').onclick = ()=>dialog.close('cancel');
+                    document.getElementById('exportAllExecute').onclick = ()=>dialog.close('execute');
+                    dialog.showModal();
+                });
+            }
             if(btnExport){ btnExport.onclick = async ()=>{
+                if(btnExport.disabled) return;
+                const exportIds = Array.from(selectedBusinessIds);
+                if(!exportIds.length){
+                    btnExport.disabled = true;
+                    const confirmed = await confirmExportAll();
+                    btnExport.disabled = false;
+                    if(!confirmed) return;
+                }
                 clearRowSelection();
-                const params = new URLSearchParams(window.location.search);
-                params.set('sort', transientFilter.sort !== null ? transientFilter.sort : (params.get('sort') || 'created_at'));
-                params.set('bid_status', transientFilter.bid_status !== null ? transientFilter.bid_status : (params.get('bid_status') || ''));
-                params.delete('page');
-                params.delete('v');
+                const params = new URLSearchParams();
+                const currentParams = new URLSearchParams(window.location.search);
+                params.set('sort', transientFilter.sort !== null ? transientFilter.sort : (currentParams.get('sort') || 'created_at'));
+                if(exportIds.length) params.set('ids', exportIds.join(','));
                 btnExport.disabled = true;
                 btnExport.setAttribute('aria-busy', 'true');
                 btnExport.title = '正在生成 PDF…';
-                showTip('正在生成 PDF，请稍候…');
+                showTip(exportIds.length ? `正在导出选中的 ${exportIds.length} 条业务…` : '未选中业务，正在导出全部业务…');
                 try{
                     const resp = await fetch(`/api/export_data?${params.toString()}`);
                     if(!resp.ok || !resp.headers.get('Content-Type')?.includes('application/pdf')){
@@ -1380,21 +1478,27 @@
                 }finally{
                     btnExport.disabled = false;
                     btnExport.removeAttribute('aria-busy');
-                    btnExport.title = '导出';
+                    btnExport.title = '导出 PDF：选中业务时仅导出选中项；未选中时导出全部业务';
                 }
             }; }
-            if(btnView){ btnView.onclick = ()=>{ let id=getSelectedId(); if(!id && data[0]) id = data[0].id; clearRowSelection(); if(id) window.location.href = `/ui/business/${id}/detail`; else showTip(); }; }
-            if(btnEdit){ btnEdit.onclick = ()=>{ let id=getSelectedId(); if(!id && data[0]) id = data[0].id; clearRowSelection(); if(id) window.location.href = `/ui/business/${id}/edit`; else showTip(); }; }
+            if(btnView){ btnView.onclick = ()=>{ const id=getSelectedId(); if(!id) return; clearRowSelection(); window.location.href = `/ui/business/${id}/detail`; }; }
+            if(btnEdit){ btnEdit.onclick = ()=>{ const id=getSelectedId(); if(!id) return; clearRowSelection(); window.location.href = `/ui/business/${id}/edit`; }; }
             if(btnCreate){ btnCreate.onclick = ()=>{ clearRowSelection(); window.location.href = `/ui/business/new`; }; }
             if(btnDelete){ btnDelete.onclick = async ()=>{
-                const id=getSelectedId();
+                const ids = Array.from(selectedBusinessIds);
+                if(!ids.length){ showTip(); return; }
+                if(!confirm(`确定要删除选中的 ${ids.length} 条业务吗？此操作不可恢复。`)) return;
                 clearRowSelection();
-                if(!id){ showTip(); return; }
-                if(!confirm('确定要删除这个业务吗？此操作不可恢复。')) return;
+                btnDelete.disabled = true;
                 try{
-                    const resp = await fetch(`/business/${id}/delete`, { method:'POST' });
-                    if(resp.ok){ await fetchPage(currentPage); await fetchStats(); }
-                }catch{}
+                    for(const id of ids){
+                        const resp = await fetch(`/business/${id}/delete`, { method:'POST' });
+                        if(!resp.ok) throw new Error('删除失败，请确认管理员权限');
+                    }
+                    const remaining = Math.max(0, totalItems - ids.length);
+                    currentPage = Math.min(currentPage, Math.max(1, Math.ceil(remaining/pageSize)));
+                }catch(error){ showTip(error.message || '删除失败，请稍后重试'); }
+                finally{ btnDelete.disabled = false; await fetchPage(currentPage); await fetchStats(); }
             }; }
 
             // 搜索框对接后端：回车提交到 URL，并刷新第一页
