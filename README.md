@@ -53,7 +53,7 @@ npm.cmd run dev:cloudflare
 
 按 [Cloudflare 部署指南](cloudflare/README.md)创建 D1、替换 `wrangler.jsonc` 的数据库占位 ID、应用远程迁移、部署并设置首个管理员。线上初始化需要 `ADMIN_SETUP_KEY`，本地账户和业务不会自动上传。
 
-v2.0.2 已通过本地功能测试、PDF 浏览器检查及部署模拟，用户已确认文字 PDF 导出正常。此前 v2.0.1 已部署到 Cloudflare，线上 HTTP 跳转及微信 HTTPS 登录已验证；v2.0.2 的线上更新需另行部署。免费计划 CPU 指标仍需在控制台观察。
+v2.0.2 已通过本地功能测试、PDF 浏览器检查及部署模拟，用户已确认文字 PDF 导出正常，并于 2026-10-08 部署到 Cloudflare。线上登录页、独立管理登录和 HTTP 跳转至 HTTPS 已验证；此前微信 HTTPS 登录已验证。免费计划 CPU 指标仍需在控制台观察。
 
 ## 使用说明
 
