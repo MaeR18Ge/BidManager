@@ -1,6 +1,6 @@
 # BidManager
 
-**投标管理系统 · v2.0.1 · 2026-10-08**
+**投标管理系统 · v2.0.2 · 2026-10-08**
 
 A bid management system for tracking projects, bidding schedules, tender documents, business changes, and PDF exports.
 
@@ -14,7 +14,7 @@ A bid management system for tracking projects, bidding schedules, tender documen
 - 单选、Ctrl / Command 多选、Shift 区间选择，跨页保留选择。
 - 自动记录字段变更，保留修改前后内容、操作人、时间和变更说明。
 - 业务总数、已投标数、已中标数、中标金额及近 12 周统计曲线。
-- 管理员删除业务及导出 PDF：选中时导出所选业务，未选中时确认导出全部业务。
+- 管理员删除业务及导出可选中、搜索和复制文字的 PDF：选中时导出所选业务，未选中时确认导出全部业务。
 - 独立管理员页面，支持账户创建、角色调整、启停及密码重设。
 - 管理员每次导入 200 条测试业务，并按来源一键清除；修改过的测试业务仍可清除，手动录入的正式业务保留。
 
@@ -53,7 +53,7 @@ npm.cmd run dev:cloudflare
 
 按 [Cloudflare 部署指南](cloudflare/README.md)创建 D1、替换 `wrangler.jsonc` 的数据库占位 ID、应用远程迁移、部署并设置首个管理员。线上初始化需要 `ADMIN_SETUP_KEY`，本地账户和业务不会自动上传。
 
-v2.0.1 已部署到 Cloudflare，通过本地功能测试、部署模拟及线上 HTTP 跳转验证；用户已确认新增、删除及微信 HTTPS 登录正常。免费计划 CPU 指标仍需在控制台观察。
+v2.0.2 已通过本地功能测试、PDF 浏览器检查及部署模拟，用户已确认文字 PDF 导出正常。此前 v2.0.1 已部署到 Cloudflare，线上 HTTP 跳转及微信 HTTPS 登录已验证；v2.0.2 的线上更新需另行部署。免费计划 CPU 指标仍需在控制台观察。
 
 ## 使用说明
 
@@ -61,7 +61,7 @@ v2.0.1 已部署到 Cloudflare，通过本地功能测试、部署模拟及线�
 
 查看和编辑需要恰好选择一条业务。管理员可以批量删除，操作前需要确认。选中业务时 PDF 仅导出所选项，单次最多 500 条；未选中时确认导出数据库全部业务，不受当前分页、搜索或筛选限制。
 
-PDF 使用 html2canvas + jsPDF，在浏览器生成 A4 竖向文档，包含导出人、日期、金额汇总及页码。中文以图像方式嵌入，文字暂不支持搜索或复制。
+PDF 使用 html2canvas + jsPDF，在浏览器生成 A4 竖向文档，包含导出人、日期、金额汇总及页码。文字使用嵌入的中文字体，可选中、搜索和复制；表格线条与状态色块仍由 html2canvas 绘制。约 10MB 的中文字体仅在首次导出时按需加载，随后在当前页面复用，不依赖第三方字体服务。
 
 ## 数据与备份
 

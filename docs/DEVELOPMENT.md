@@ -1,6 +1,6 @@
 # 开发维护指南
 
-适用版本：v2.0.1。用户使用入口见 [README](../README.md)，线上配置与备份见 [Cloudflare 部署指南](../cloudflare/README.md)。
+适用版本：v2.0.2。用户使用入口见 [README](../README.md)，线上配置与备份见 [Cloudflare 部署指南](../cloudflare/README.md)。
 
 ## 代码结构
 
@@ -9,7 +9,8 @@
 - `cloudflare/pages.js`：登录页和业务详情、编辑、新增页面。
 - `cloudflare/avatar.js`：用户名默认头像，共用英文大写及中文首字规则。
 - `cloudflare/test-data.js`：近 12 周的 200 条测试业务生成器。
-- `cloudflare/browser-pdf.js`：html2canvas + jsPDF 导出、分页和金额汇总。
+- `cloudflare/browser-pdf.js`：html2canvas 背景 + jsPDF 原生文字导出、分页和金额汇总。
+- `static/vendor/pdf-fonts`：导出专用中文 TTF、OFL 许可证和来源记录，构建时复制到静态资源。
 - `cloudflare/build.mjs`：复制并转换列表页，打包图标、图表及 PDF 依赖到 `cloudflare/public`。
 - `static/figma/BDpage/order-management.html`：共用列表页源文件；不要直接修改生成的 `cloudflare/public`。
 - `cloudflare/migrations`：按顺序应用的 D1 迁移；已发布迁移不要修改，应追加新的 SQL 文件。
@@ -108,7 +109,9 @@ node cloudflare/pdf-layout-check.cjs
 Remove-Item Env:BID_TEST_USERNAME, Env:BID_TEST_PASSWORD, Env:TEST_BASE_URL
 ```
 
-检查 PDF 下载、选中/全部导出、取消、分页内容完整性、长文本和 HTML 转义，以及菜单滚动跟随、边缘翻转和离屏关闭。PDF、截图及临时数据库保存在被忽略的 `cloudflare/test-artifacts`。适配器只验证应用行为，不能替代真实 Wrangler / D1 或线上运行环境。
+检查 PDF 下载、选中/全部导出、取消、分页内容完整性、长文本和 HTML 转义，以及菜单滚动跟随、边缘翻转和离屏关闭。PDF 布局检查还验证 Unicode 字体映射及色块背景中不含文字；使用 PDF 阅读器检查中文搜索、选中和复制。PDF、截图及临时数据库保存在被忽略的 `cloudflare/test-artifacts`。适配器只验证应用行为，不能替代真实 Wrangler / D1 或线上运行环境。
+
+PDF 继续在浏览器使用 html2canvas + jsPDF。HTML 负责分页和测量每条文字的换行、坐标及基线；html2canvas 在克隆文档中隐藏文字，只绘制线条和色块；jsPDF 将测量后的文字写入 PDF，并嵌入所用中文字符的字体子集。字体按需加载并缓存，不修改列表页的字体和内容。遇到字体未覆盖的字符会明确报错，避免导出中静默丢字；字体覆盖范围和来源见 `static/vendor/pdf-fonts/README.md`。
 
 ## 发布约定
 

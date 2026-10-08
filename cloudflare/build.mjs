@@ -38,6 +38,10 @@ page=page.replace(/async function updateUserInfo\(\) \{[\s\S]*?\n            \}/
             }`);
 await writeFile(new URL('figma/BDpage/order-management.html',output),page);
 await copyFile(new URL('static/vendor/tailwind/tailwindcdn.js',root),new URL('vendor/tailwindcdn.js',output));
+await mkdir(new URL('vendor/pdf-fonts/',output),{recursive:true});
+for (const file of ['BidManagerSansSC-Regular.ttf', 'OFL.txt']) {
+ await copyFile(new URL('static/vendor/pdf-fonts/'+file,root),new URL('vendor/pdf-fonts/'+file,output));
+}
 await copyFile(new URL('node_modules/chart.js/dist/chart.umd.js',root),new URL('vendor/chart.umd.js',output));
 for(const [pkg,files] of [['font-awesome',['css/font-awesome.min.css','fonts/fontawesome-webfont.woff2','fonts/fontawesome-webfont.woff','fonts/fontawesome-webfont.ttf']],['bootstrap-icons',['font/bootstrap-icons.css','font/fonts/bootstrap-icons.woff2','font/fonts/bootstrap-icons.woff']]]) {
  for(const file of files){const target=new URL('vendor/'+pkg+'/'+file,output);await mkdir(new URL('./',target),{recursive:true});await copyFile(new URL('node_modules/'+pkg+'/'+file,root),target);}

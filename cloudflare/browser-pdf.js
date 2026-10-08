@@ -6,6 +6,86 @@ const PAGE_WIDTH = 960;
 const CONTENT_WIDTH_MM = 180;
 const CONTENT_HEIGHT_MM = 257;
 const MAX_HEIGHT = PAGE_WIDTH * CONTENT_HEIGHT_MM / CONTENT_WIDTH_MM;
+const MM_PER_PIXEL = CONTENT_WIDTH_MM / PAGE_WIDTH;
+const PDF_FONT = 'BidManagerSansSC';
+const PDF_FONT_FILE = 'BidManagerSansSC-Regular.ttf';
+let fontPromise;
+
+// The font is fetched only for exports and reused by subsequent exports.
+function loadPDFFont() {
+    if (!fontPromise) {
+        fontPromise = (async () => {
+            const response = await fetch(`/static/vendor/pdf-fonts/${PDF_FONT_FILE}`);
+            if (!response.ok) throw new Error('中文 PDF 字体加载失败，请稍后重试');
+            const buffer = await response.arrayBuffer();
+            const face = new FontFace(PDF_FONT, buffer);
+            await face.load();
+            document.fonts.add(face);
+            const bytes = new Uint8Array(buffer), chunks = [];
+            for (let index = 0; index < bytes.length; index += 8192) {
+                chunks.push(String.fromCharCode(...bytes.subarray(index, index + 8192)));
+            }
+            return {binary:chunks.join(''), face};
+        })().catch(error => { fontPromise = undefined; throw error; });
+    }
+    return fontPromise;
+}
+
+// Measure each wrapped line in the same DOM used by the existing paginator.
+// Font metrics locate its baseline; the PDF receives real text, not an OCR layer.
+function textLines(host, pdf) {
+    const origin = host.getBoundingClientRect(), lines = [];
+    const metricsCanvas = document.createElement('canvas');
+    const context = metricsCanvas.getContext('2d');
+    const font = pdf.internal.getFont().metadata;
+    const walker = document.createTreeWalker(host, NodeFilter.SHOW_TEXT, {
+        acceptNode: node => node.textContent.trim() && !node.parentElement.closest('style,script')
+            ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT
+    });
+    const range = document.createRange();
+    let node;
+    while ((node = walker.nextNode())) {
+        const style = getComputedStyle(node.parentElement), size = parseFloat(style.fontSize);
+        context.font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} "${PDF_FONT}"`;
+        const metrics = context.measureText('测Ag');
+        const ascent = metrics.fontBoundingBoxAscent ?? size * font.ascender / 1000;
+        const color = style.color.match(/[\d.]+/g).slice(0, 3).map(Number);
+        let offset = 0, line;
+        for (const character of node.textContent) {
+            range.setStart(node, offset);
+            offset += character.length;
+            range.setEnd(node, offset);
+            const rect = range.getBoundingClientRect();
+            if (!rect.width || !rect.height || /[\r\n\t]/.test(character)) continue;
+            if (character.codePointAt(0) > 0xffff || !font.characterToGlyph(character.charCodeAt(0))) {
+                throw new Error(`PDF 字体暂不支持字符“${character}”，请调整导出内容后重试`);
+            }
+            if (!line || Math.abs(rect.top - line.top) > 1) {
+                line = {text:'', x:rect.left - origin.left, y:rect.top - origin.top + ascent,
+                    top:rect.top, width:0, size, color, bold:Number(style.fontWeight) >= 600};
+                lines.push(line);
+            }
+            line.text += character;
+            line.width = rect.right - origin.left - line.x;
+        }
+    }
+    return lines;
+}
+
+function writeText(pdf, lines) {
+    pdf.setFont(PDF_FONT, 'normal');
+    for (const line of lines) {
+        pdf.setFontSize(line.size * MM_PER_PIXEL * 72 / 25.4);
+        pdf.setTextColor(...line.color);
+        pdf.setDrawColor(...line.color);
+        pdf.setLineWidth(line.size * .002);
+        const length = [...line.text].length;
+        const charSpace = length > 1 ? (line.width * MM_PER_PIXEL - pdf.getTextWidth(line.text)) / (length - 1) : 0;
+        pdf.text(line.text, 15 + line.x * MM_PER_PIXEL, 20 + line.y * MM_PER_PIXEL, {
+            charSpace, renderingMode:line.bold ? 'fillThenStroke' : 'fill'
+        });
+    }
+}
 const columns = [
     ['name', '业务名称', 35, 'pdf-name'],
     ['service_people', '服务人数', 8, 'pdf-right'],
@@ -40,7 +120,7 @@ function cellHTML(row, key) {
 }
 
 const stylesheet = `
-    [data-bidmanager-pdf] { box-sizing:border-box; background:#fff; color:#111; font:14px/1.4 "Microsoft YaHei","PingFang SC","Noto Sans CJK SC",Arial,sans-serif; }
+    [data-bidmanager-pdf] { box-sizing:border-box; background:#fff; color:#111; font:14px/1.4 "BidManagerSansSC",sans-serif; }
     [data-bidmanager-pdf] * { box-sizing:border-box; font-family:inherit; }
     [data-bidmanager-pdf] .pdf-header { text-align:center; margin-bottom:30px; border-bottom:2px solid #333; padding:0 0 12px; }
     [data-bidmanager-pdf] h1 { color:#333; margin:0 0 12px; font-size:26px; font-weight:700; line-height:1.4; }
@@ -61,7 +141,14 @@ const stylesheet = `
 
 window.BidManagerPDF = async function(items, options = {}) {
     if (!items.length) throw new Error('没有可导出的业务');
-    const pdf = new jsPDF({orientation:'portrait', unit:'mm', format:'a4', compress:true});
+    const font = await loadPDFFont();
+    const pdf = new jsPDF({orientation:'portrait', unit:'mm', format:'a4', compress:true, putOnlyUsedFonts:true});
+    pdf.addFileToVFS(PDF_FONT_FILE, font.binary);
+    pdf.addFont(PDF_FONT_FILE, PDF_FONT, 'normal');
+    pdf.setFont(PDF_FONT, 'normal');
+    if (typeof pdf.internal.getFont().metadata.characterToGlyph !== 'function') {
+        throw new Error('中文 PDF 字体初始化失败，请稍后重试');
+    }
     const parts = Object.fromEntries(new Intl.DateTimeFormat('zh-CN', {
         timeZone:'Asia/Shanghai', year:'numeric', month:'2-digit', day:'2-digit',
         hour:'2-digit', minute:'2-digit', second:'2-digit', hourCycle:'h23'
@@ -103,10 +190,24 @@ window.BidManagerPDF = async function(items, options = {}) {
                 index++;
             }
 
-            const canvas = await html2canvas(host, {scale:2, backgroundColor:'#fff', logging:false});
+            const lines = textLines(host, pdf);
+            // Keep html2canvas for table rules and badge backgrounds only.
+            // Removing text in the clone leaves layout and the live page untouched.
+            const canvas = await html2canvas(host, {scale:2, backgroundColor:'#fff', logging:false,
+                onclone: clonedDocument => {
+                    clonedDocument.fonts.add(font.face);
+                    const clone = clonedDocument.querySelector('[data-bidmanager-pdf]');
+                    for (const element of [clone, ...clone.querySelectorAll('*')]) {
+                        element.style.setProperty('color', 'transparent', 'important');
+                        element.style.setProperty('-webkit-text-fill-color', 'transparent', 'important');
+                        element.style.setProperty('text-shadow', 'none', 'important');
+                    }
+                }
+            });
             if (page++) pdf.addPage();
             // Preserve the measured aspect ratio instead of compressing tall content to fit.
             pdf.addImage(canvas.toDataURL('image/jpeg', .95), 'JPEG', 15, 20, CONTENT_WIDTH_MM, canvas.height * CONTENT_WIDTH_MM / canvas.width);
+            writeText(pdf, lines);
             canvas.width = 0;
             canvas.height = 0;
             await new Promise(resolve => setTimeout(resolve, 0));

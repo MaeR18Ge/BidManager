@@ -1,6 +1,6 @@
 # Cloudflare 部署指南
 
-适用版本：**BidManager v2.0.1**。从项目根目录执行命令，以下示例使用 Windows PowerShell。
+适用版本：**BidManager v2.0.2**。从项目根目录执行命令，以下示例使用 Windows PowerShell。
 
 Workers 处理页面、身份验证和业务接口，D1 保存业务、变更历史、账户及会话；静态资源随 Worker 发布，PDF 在浏览器生成。线上无需 Flask、Python、Node PDF 服务、R2 或 Browser Run。
 
@@ -65,7 +65,7 @@ npx.cmd wrangler secret put ADMIN_SETUP_KEY
 - 如需演示数据，可由管理员导入 200 条；完成演示后可按来源清除。
 - 查看 Cloudflare 的实际 CPU、数据库读取量及错误指标，确认满足所选计划额度。
 
-v2.0.1 已通过 11 组本地测试、资源构建及部署模拟，并完成真实 Cloudflare 部署。线上 HTTP 跳转至 HTTPS 已验证，用户已确认新增、删除及微信 HTTPS 登录正常；免费计划 CPU 指标仍需在控制台观察。
+v2.0.2 已通过 11 组本地测试、资源构建、PDF 浏览器检查及部署模拟，用户已确认文字 PDF 导出正常。此前 v2.0.1 已完成真实 Cloudflare 部署，线上 HTTP 跳转至 HTTPS 及微信 HTTPS 登录已验证；v2.0.2 尚需部署到线上，免费计划 CPU 指标仍需在控制台观察。
 
 ## 日常更新
 
@@ -141,6 +141,6 @@ npx.cmd wrangler d1 export bidmanager --remote --output=cloudflare/backup.privat
 
 D1 免费计划每天读取 500 万行、写入 10 万行，总存储 5GB；单库上限 500MB。读取按扫描行计算，搜索及统计需关注实际用量。参见 [D1 定价](https://developers.cloudflare.com/d1/platform/pricing/)与 [D1 限制](https://developers.cloudflare.com/d1/platform/limits/)。免费额度与政策可能调整，超出额度时操作可能失败。
 
-本地验证不能代替线上 CPU 测量。大量业务导出还受用户设备的内存与浏览器速度影响；单次选中导出最多 500 条，全部导出需确认。PDF 为图像式文档，文字暂不支持搜索和复制。
+本地验证不能代替线上 CPU 测量。大量业务导出还受用户设备的内存与浏览器速度影响；单次选中导出最多 500 条，全部导出需确认。PDF 文字可选中、搜索和复制，中文字体随静态资源发布，约 10MB，仅在首次导出时加载并在当前页面复用。表格线条与状态色块保留图像背景，应用继续使用 html2canvas + jsPDF，不需要新的运行服务。
 
 统计曲线按录入时间、最后更新时间和当前投标状态汇总，后续编辑会影响时间段归属；它不是每次投标和中标事件的历史快照。
