@@ -446,7 +446,7 @@
                             <button id="btnDelete" class="bg-[#242424] border border-dark-100 rounded-md w-[34px] h-[34px] text-sm text-text-secondary hover:text-text-primary hover:ring-1 hover:ring-primary focus:outline-none focus:ring-1 focus:ring-primary flex items-center justify-center" title="删除">
                                 <i class="bi bi-trash"></i>
                             </button>
-                            <button id="btnExport" class="bg-[#242424] border border-dark-100 rounded-md w-[34px] h-[34px] text-sm text-text-secondary hover:text-text-primary hover:ring-1 hover:ring-primary focus:outline-none focus:ring-1 focus:ring-primary flex items-center justify-center" title="导出 PDF：选中业务时仅导出选中项；未选中时导出全部业务" aria-label="导出 PDF：选中业务时仅导出选中项；未选中时导出全部业务">
+                            <button id="btnExport" class="bg-[#242424] border border-dark-100 rounded-md w-[34px] h-[34px] text-sm text-text-secondary hover:text-text-primary hover:ring-1 hover:ring-primary focus:outline-none focus:ring-1 focus:ring-primary flex items-center justify-center" title="导出 PDF：选中业务时仅导出选中项；未选中时导出当前列表全部筛选结果" aria-label="导出 PDF：选中业务时仅导出选中项；未选中时导出当前列表全部筛选结果">
                                 <i class="bi bi-download"></i>
                             </button>
                             <button id="btnCreate" class="bg-primary hover:bg-primary/90 text-white px-3 py-1.5 h-[34px] rounded-md text-sm font-medium transition-colors flex items-center">
@@ -540,8 +540,8 @@
     </main>
 
     <dialog id="exportAllDialog" aria-labelledby="exportAllTitle" aria-describedby="exportAllDescription">
-        <h2 id="exportAllTitle">导出全部业务</h2>
-        <p id="exportAllDescription">未选中任何业务。执行后将导出全部业务内容，不受当前分页、搜索或筛选条件限制。</p>
+        <h2 id="exportAllTitle">导出当前业务列表</h2>
+        <p id="exportAllDescription">未选中任何业务。执行后将导出当前列表的全部业务，保留统计卡或搜索筛选条件，包含所有分页。</p>
         <div class="dialog-actions">
             <button type="button" id="exportAllCancel" autofocus>放弃</button>
             <button type="button" id="exportAllExecute">执行</button>
@@ -868,15 +868,22 @@
                 return { text: `剩${left}天`, cls: 'text-warning' };
             }
 
+            function getListingParams(){
+                const url = new URL(window.location.href);
+                return new URLSearchParams({
+                    search: url.searchParams.get('search') || '',
+                    sort: transientFilter.sort !== null ? transientFilter.sort : (url.searchParams.get('sort') || 'created_at'),
+                    bid_status: transientFilter.bid_status !== null ? transientFilter.bid_status : (url.searchParams.get('bid_status') || '')
+                });
+            }
+
             async function fetchPage(page, preserveSelection = false){
                 if(!preserveSelection) clearRowSelection();
-                const url = new URL(window.location.href);
-                const search = url.searchParams.get('search')||'';
-                const urlSort = url.searchParams.get('sort')||'created_at';
-                const urlBidStatus = url.searchParams.get('bid_status')||'';
-                const effSort = transientFilter.sort !== null ? transientFilter.sort : urlSort;
-                const effBidStatus = transientFilter.bid_status !== null ? transientFilter.bid_status : urlBidStatus;
-                const resp = await fetch(`/api/listing?page=${page}&per_page=${pageSize}&search=${encodeURIComponent(search)}&sort=${encodeURIComponent(effSort)}&bid_status=${encodeURIComponent(effBidStatus)}&_=${Date.now()}`);
+                const params = getListingParams();
+                params.set('page', String(page));
+                params.set('per_page', String(pageSize));
+                params.set('_', String(Date.now()));
+                const resp = await fetch(`/api/listing?${params.toString()}`);
                 const json = await resp.json();
                 totalItems = json.total;
                 data = json.items.map(r=>{
@@ -1452,6 +1459,7 @@
                     tip.style.top = '20px';
                     tip.style.right = '20px';
                     tip.style.zIndex = '9999';
+                    tip.style.pointerEvents = 'none';
                     tip.style.background = 'rgba(0,0,0,0.8)';
                     tip.style.color = '#fff';
                     tip.style.padding = '8px 12px';
@@ -1485,14 +1493,16 @@
                     if(!confirmed) return;
                 }
                 clearRowSelection();
-                const params = new URLSearchParams();
-                const currentParams = new URLSearchParams(window.location.search);
-                params.set('sort', transientFilter.sort !== null ? transientFilter.sort : (currentParams.get('sort') || 'created_at'));
-                if(exportIds.length) params.set('ids', exportIds.join(','));
+                const params = getListingParams();
+                if(exportIds.length){
+                    params.delete('search');
+                    params.delete('bid_status');
+                    params.set('ids', exportIds.join(','));
+                }
                 btnExport.disabled = true;
                 btnExport.setAttribute('aria-busy', 'true');
                 btnExport.title = '正在生成 PDF…';
-                showTip(exportIds.length ? `正在导出选中的 ${exportIds.length} 条业务…` : '未选中业务，正在导出全部业务…');
+                showTip(exportIds.length ? `正在导出选中的 ${exportIds.length} 条业务…` : '正在导出当前列表的全部筛选结果…');
                 try{
                     const resp = await fetch(`/api/export_data?${params.toString()}`);
                     if(!resp.ok || !resp.headers.get('Content-Type')?.includes('application/pdf')){
@@ -1513,7 +1523,7 @@
                 }finally{
                     btnExport.disabled = false;
                     btnExport.removeAttribute('aria-busy');
-                    btnExport.title = '导出 PDF：选中业务时仅导出选中项；未选中时导出全部业务';
+                    btnExport.title = '导出 PDF：选中业务时仅导出选中项；未选中时导出当前列表全部筛选结果';
                 }
             }; }
             if(btnView){ btnView.onclick = ()=>{ const id=getSelectedId(); if(!id) return; clearRowSelection(); window.location.href = `/ui/business/${id}/detail`; }; }
@@ -1559,6 +1569,8 @@
                         if(val){ url.searchParams.set('search', val); }
                         else{ url.searchParams.delete('search'); }
                         history.replaceState({}, '', url.toString());
+                        transientFilter = { bid_status: null, sort: null };
+                        viewState.mode = 'none';
                         currentPage = 1;
                         fetchPage(currentPage);
                         fetchStats();
@@ -1576,6 +1588,8 @@
                     if(val){ url.searchParams.set('search', val); }
                     else{ url.searchParams.delete('search'); }
                     history.replaceState({}, '', url.toString());
+                    transientFilter = { bid_status: null, sort: null };
+                    viewState.mode = 'none';
                     currentPage = 1;
                     fetchPage(currentPage);
                     fetchStats();

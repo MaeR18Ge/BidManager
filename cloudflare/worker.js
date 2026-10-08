@@ -51,8 +51,17 @@ export function validateBusiness(input) {
  return data;
 }
 export function orderSQL(sort) {
+ if(sort==='amount_desc') return 'bid_amount DESC, id DESC';
  if(['registration_time','bid_time'].includes(sort)) return `CASE WHEN ${sort} IS NULL THEN 3 WHEN date(${sort}) < date('now','+8 hours') THEN 2 WHEN date(${sort}) = date('now','+8 hours') THEN 0 ELSE 1 END, ${sort} ASC, id DESC`;
  return 'created_at DESC, id DESC';
+}
+function listingFilter(searchParams) {
+ const conditions=[],params=[];
+ const search=searchParams.get('search')?.slice(0,200),status=searchParams.get('bid_status');
+ // D1 limits LIKE patterns to 50 bytes; literal substring search supports long Chinese names.
+ if(search){const keys=fields.filter(k=>!['bid_amount','service_people','registration_time','bid_time','document_url','previous_suppliers'].includes(k));conditions.push('('+keys.map(k=>`instr(lower(coalesce(${k},'')),lower(?))>0`).join(' OR ')+')');params.push(...keys.map(()=>search));}
+ if(status){conditions.push(status==='已投标'?"bid_status IN ('已投标','未中标','已中标')":'bid_status=?');if(status!=='已投标')params.push(status);}
+ return {where:conditions.length?' WHERE '+conditions.join(' AND '):'',params};
 }
 async function stats(db) {
  const totals=await db.prepare(`SELECT count(*) total, coalesce(sum(bid_status IN ('已投标','未中标','已中标')),0) bidAll, coalesce(sum(bid_status='已中标'),0) won, coalesce(sum(CASE WHEN bid_status='已中标' THEN bid_amount ELSE 0 END),0)/10000 amountWan FROM business`).first();
@@ -124,12 +133,8 @@ async function handle(request,env) {
  if(path==='/api/stats') return json(await stats(db));
  if(path==='/api/listing') {
   const size=[10,20,50].includes(Number(url.searchParams.get('per_page')))?Number(url.searchParams.get('per_page')):10;
-  const page=Math.max(1,Math.min(100000,parseInt(url.searchParams.get('page'))||1)); const conditions=[],params=[];
-  const search=url.searchParams.get('search')?.slice(0,200),status=url.searchParams.get('bid_status');
-  // D1 limits LIKE patterns to 50 bytes; literal substring search supports long Chinese names.
-  if(search){const keys=fields.filter(k=>!['bid_amount','service_people','registration_time','bid_time','document_url','previous_suppliers'].includes(k));conditions.push('('+keys.map(k=>`instr(lower(coalesce(${k},'')),lower(?))>0`).join(' OR ')+')');params.push(...keys.map(()=>search));}
-  if(status){conditions.push(status==='已投标'?"bid_status IN ('已投标','未中标','已中标')":'bid_status=?');if(status!=='已投标')params.push(status);}
-  const where=conditions.length?' WHERE '+conditions.join(' AND '):'';
+  const page=Math.max(1,Math.min(100000,parseInt(url.searchParams.get('page'))||1));
+  const {where,params}=listingFilter(url.searchParams);
   const total=(await db.prepare('SELECT count(*) n FROM business'+where).bind(...params).first()).n;
   const items=(await db.prepare('SELECT * FROM business'+where+' ORDER BY '+orderSQL(url.searchParams.get('sort'))+' LIMIT ? OFFSET ?').bind(...params,size,(page-1)*size).all()).results;
   return json({page,per_page:size,total,items});
@@ -138,7 +143,8 @@ async function handle(request,env) {
   if(user.role!=='admin')return json({message:'当前用户不具有此权限'},403);
   const raw=url.searchParams.get('ids');let ids=[];
   if(raw!==null){if(!/^[1-9]\d*(,[1-9]\d*)*$/.test(raw))return json({message:'业务编号不合法'},400);ids=[...new Set(raw.split(',').map(Number))];if(ids.length>500||ids.some(x=>!Number.isSafeInteger(x)))return json({message:'单次最多导出500条选中业务'},400);}
-  const rows=(await db.prepare('SELECT * FROM business'+(ids.length?' WHERE id IN (SELECT value FROM json_each(?))':'')+' ORDER BY '+orderSQL(url.searchParams.get('sort'))).bind(...(ids.length?[JSON.stringify(ids)]:[])).all()).results;
+  const {where,params}=ids.length?{where:' WHERE id IN (SELECT value FROM json_each(?))',params:[JSON.stringify(ids)]}:listingFilter(url.searchParams);
+  const rows=(await db.prepare('SELECT * FROM business'+where+' ORDER BY '+orderSQL(url.searchParams.get('sort'))).bind(...params).all()).results;
   if(ids.length&&rows.length!==ids.length)return json({message:'部分选中业务已被删除，请刷新列表'},404);
   return json({items:rows,exporter:user.username});
  }

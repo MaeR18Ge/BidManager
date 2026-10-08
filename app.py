@@ -1152,16 +1152,16 @@ def delete_business(id):
 @app.route('/api/export_data')
 @login_required
 def export_data():
-    """导出选中的业务；未提供选中 ID 时导出全部业务。"""
+    """导出选中的业务；未提供选中 ID 时导出当前列表全部筛选结果。"""
     try:
         # 仅管理员可导出
         if not (hasattr(current_user, 'role') and current_user.role == 'admin'):
             flash('无权限导出PDF', 'error')
             return redirect(url_for('index'))
-        # 导出范围独立于列表搜索和状态筛选。
-        search = ''
+        # 显式选择优先；未选择时沿用列表筛选，不限制分页。
+        search = '' if 'ids' in request.args else request.args.get('search', '')
         sort_by = request.args.get('sort', 'created_at')
-        bid_status_filter = ''
+        bid_status_filter = '' if 'ids' in request.args else request.args.get('bid_status', '')
         page = request.args.get('page', 1, type=int)
         per_page = 10  # 与页面分页保持一致
         exporter = current_user.username if current_user.is_authenticated else '系统'

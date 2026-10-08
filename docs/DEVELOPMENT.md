@@ -1,6 +1,6 @@
 # 开发维护指南
 
-适用版本：v2.0.2。用户使用入口见 [README](../README.md)，线上配置与备份见 [Cloudflare 部署指南](../cloudflare/README.md)。
+适用版本：v2.0.3。用户使用入口见 [README](../README.md)，线上配置与备份见 [Cloudflare 部署指南](../cloudflare/README.md)。
 
 ## 代码结构
 
@@ -21,7 +21,7 @@
 
 主界面登录后载入用户、业务列表和统计；用户可以新增业务、编辑字段、直接修改标书或投标状态。业务修改同时保存更新时间与操作人，并将字段前后值记录到历史；详情页按时间倒序展示。
 
-管理员可删除选中业务及其关联历史；导出时服务端先校验管理员权限及业务编号，返回业务数据，再由浏览器生成 PDF。没有选择时先确认全部导出。
+管理员可删除选中业务及其关联历史；导出时服务端先校验管理员权限及业务编号，返回业务数据，再由浏览器生成 PDF。没有选择时先确认导出当前筛选列表的所有分页；列表和导出共用搜索、状态筛选及排序规则。
 
 管理页使用独立登录，管理员可管理账户或导入测试业务。每批测试数据保存来源标记，清除按来源删除，正式业务及其历史保留。
 
@@ -47,7 +47,7 @@ D1 保存五类数据：`business`、`status_history`、`app_user`、`session`�
 - `/api/stats`：总数、趋势与近 12 周曲线；统计基于当前状态和录入/更新时间，并非事件快照。
 - `/ui/business/new`、`/ui/business/{id}/detail`、`/ui/business/{id}/edit`：业务页面，新增和编辑通过 POST 提交。
 - `/api/business/{id}/status`：POST 修改标书或投标状态。
-- `/business/{id}/delete`：管理员 POST 删除业务；`/api/export_data` 返回管理员导出数据，`ids` 最多 500 个。
+- `/business/{id}/delete`：管理员 POST 删除业务；`/api/export_data` 返回管理员导出数据，`ids` 最多 500 个。没有 `ids` 时沿用 `search`、`bid_status`、`sort`，忽略分页参数；有 `ids` 时优先导出明确选中的业务。
 - `/admin`、`/admin/setup`、`/admin/login`、`/admin/logout`：独立管理页面、首个管理员初始化及会话。
 - `/admin/users`、`/admin/users/{id}`：管理员读取、新建和更新账户。
 - `/admin/test-data/import`、`/admin/test-data/clear`：管理员 POST 导入 200 条及确认清除测试业务。
@@ -106,10 +106,11 @@ $env:TEST_BASE_URL = 'http://127.0.0.1:8788'
 node cloudflare/smoke-browser.cjs
 node cloudflare/dropdown-scroll-check.cjs
 node cloudflare/pdf-layout-check.cjs
+node cloudflare/export-filter-check.cjs
 Remove-Item Env:BID_TEST_USERNAME, Env:BID_TEST_PASSWORD, Env:TEST_BASE_URL
 ```
 
-检查 PDF 下载、选中/全部导出、取消、分页内容完整性、长文本和 HTML 转义，以及菜单滚动跟随、边缘翻转和离屏关闭。PDF 布局检查还验证 Unicode 字体映射及色块背景中不含文字；使用 PDF 阅读器检查中文搜索、选中和复制。PDF、截图及临时数据库保存在被忽略的 `cloudflare/test-artifacts`。适配器只验证应用行为，不能替代真实 Wrangler / D1 或线上运行环境。
+检查 PDF 下载、选中/筛选列表导出、取消、分页内容完整性、长文本和 HTML 转义，以及菜单滚动跟随、边缘翻转和离屏关闭。`export-filter-check.cjs` 覆盖统计卡与搜索筛选、跨分页范围、搜索后重置卡片条件、取消与空结果，并实际生成中标筛选 PDF。PDF 布局检查还验证 Unicode 字体映射及色块背景中不含文字；使用 PDF 阅读器检查中文搜索、选中和复制。PDF、截图及临时数据库保存在被忽略的 `cloudflare/test-artifacts`。适配器只验证应用行为，不能替代真实 Wrangler / D1 或线上运行环境。
 
 PDF 继续在浏览器使用 html2canvas + jsPDF。HTML 负责分页和测量每条文字的换行、坐标及基线；html2canvas 在克隆文档中隐藏文字，只绘制线条和色块；jsPDF 将测量后的文字写入 PDF，并嵌入所用中文字符的字体子集。字体按需加载并缓存，不修改列表页的字体和内容。遇到字体未覆盖的字符会明确报错，避免导出中静默丢字；字体覆盖范围和来源见 `static/vendor/pdf-fonts/README.md`。
 

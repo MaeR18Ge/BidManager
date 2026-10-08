@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, readdirSync } from 'node:fs';
-import worker, { passwordHash, passwordProof, validateBusiness } from './worker.js';
+import worker, { digest, passwordHash, passwordProof, validateBusiness } from './worker.js';
 
 function database() {
  const sql=new DatabaseSync(':memory:');sql.exec('PRAGMA foreign_keys=ON;');
@@ -58,7 +58,7 @@ test('login, authorization, business lifecycle, paging, export and logout',async
  assert.equal((await (await call('/api/stats')).json()).totals.won,1);
  const selectedExport=await (await call('/api/export_data?ids=1,2')).json();
  assert.equal(selectedExport.items.length,2);assert.equal(selectedExport.exporter,'admin');
- assert.equal((await (await call('/api/export_data?search=none')).json()).items.length,23);
+ assert.equal((await (await call('/api/export_data?search=none')).json()).items.length,0);
  assert.equal((await call('/api/export_data?ids=0')).status,400);
  assert.equal((await call('/api/export_data?ids=999')).status,404);
  assert.equal(db.sql.prepare('SELECT count(*) n FROM status_history WHERE business_id=1').get().n,1);
@@ -71,6 +71,42 @@ test('login, authorization, business lifecycle, paging, export and logout',async
  cookie=oldCookie;assert.equal((await call('/api/listing')).status,401);
  db.sql.close();
 });
+test('filtered export matches the complete listing across pagination, search, status groups and ordering',async()=>{
+ const db=database(),env={DB:db};
+ try {
+  await db.prepare('INSERT INTO app_user(username,password_hash,role) VALUES (?,?,?)').bind('export-test','test-only','admin').run();
+  const token='a'.repeat(64);
+  await db.prepare('INSERT INTO session VALUES (?,?,?)').bind(await digest(token),1,Math.floor(Date.now()/1000)+60).run();
+  const call=path=>worker.fetch(new Request('http://localhost'+path,{headers:{Cookie:'bid_session='+token}}),env);
+  const statuses=['未报名','已报名','未投标','已投标','未中标','已中标'];
+  const longName='重庆市南岸区税务局在职员工健康体检项目及服务采购投标报名工作管理 AbCd % _';
+  for(let i=0;i<27;i++)await db.prepare('INSERT INTO business(name,customer,bid_status,bid_amount,registration_time,bid_time,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)').bind(i===0?longName:`项目${i}`,i%2?'单位乙':'单位甲',statuses[i%6],(i%7)*1000,`2026-10-${String(i%9+1).padStart(2,'0')}`,`2026-11-${String(i%9+1).padStart(2,'0')}`,`2026-09-${String(i+1).padStart(2,'0')}`,'2026-10-08').run();
+  const cases=[{}, {bid_status:'已投标'}, {bid_status:'已中标'}, {bid_status:'已中标',sort:'amount_desc'}, {search:'单位甲',bid_status:'已投标'}, {search:longName}, {search:'abcd'}, {search:'%'}, {search:'_'}, {search:'不存在'}, {search:'项目',sort:'registration_time'}, {sort:'bid_time'}];
+  for(const filters of cases) {
+   const params=new URLSearchParams(filters),ids=[];
+   let total=0;
+   for(let page=1;;page++) {
+    const listing=await (await call('/api/listing?'+params+'&page='+page+'&per_page=10')).json();
+    total=listing.total;ids.push(...listing.items.map(item=>item.id));
+    if(ids.length>=total)break;
+   }
+   const response=await call('/api/export_data?'+params+'&page=2&per_page=10');
+   assert.equal(response.status,200);
+   const exported=await response.json();
+   assert.equal(exported.exporter,'export-test');
+   assert.equal(exported.items.length,total);
+   assert.deepEqual(exported.items.map(item=>item.id),ids,JSON.stringify(filters));
+   if(filters.sort==='amount_desc')assert.ok(exported.items.every((item,index)=>index===0||item.bid_amount<=exported.items[index-1].bid_amount));
+   if(filters.search===longName||['abcd','%','_'].includes(filters.search))assert.equal(total,1);
+   if(filters.search==='不存在')assert.equal(total,0);
+   if(filters.bid_status==='已投标')assert.ok(exported.items.every(item=>statuses.slice(3).includes(item.bid_status)));
+  }
+  assert.equal((await (await call('/api/export_data?ids=1,2&search=不存在&bid_status=已中标')).json()).items.length,2);
+  db.sql.exec("UPDATE app_user SET role='user'");
+  assert.equal((await call('/api/export_data?bid_status=已中标')).status,403);
+ }finally{db.sql.close();}
+});
+
 test('failed login is rate limited',async()=>{
  const env={DB:database()};for(let i=0;i<10;i++)await worker.fetch(new Request('http://localhost/ui/login',{method:'POST',headers:{Origin:'http://localhost'},body:new URLSearchParams({username:'absent',password:'bad'})}),env);
  const response=await worker.fetch(new Request('http://localhost/ui/login',{method:'POST',headers:{Origin:'http://localhost'},body:new URLSearchParams({username:'absent',password:'bad'})}),env);assert.equal(response.status,429);env.DB.sql.close();
