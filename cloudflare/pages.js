@@ -217,6 +217,7 @@ document.getElementById('avatarInput').addEventListener('change',async function(
 document.getElementById('loginForm').addEventListener('submit', async function(event){
  event.preventDefault();const button=this.querySelector('.login-button');button.disabled=true;button.textContent='登录中…';showLoginError('');
  try {
+  if(!window.crypto?.subtle)throw new Error('当前浏览器无法进行安全登录，请使用HTTPS地址，或在手机系统浏览器中打开。');
   const data=new FormData(this);data.set('username',String(data.get('username')).trim());
   const avatar=await prepareAvatar(data.get('avatar'));if(avatar)data.set('avatar',avatar);else data.delete('avatar');
   const response=await fetch('/api/auth/challenge?username='+encodeURIComponent(data.get('username')));

@@ -10,6 +10,19 @@ function database() {
  const wrap=(query,params=[])=>({bind(...args){return wrap(query,args);},async first(){return sql.prepare(query).get(...params)||null;},async all(){return {results:sql.prepare(query).all(...params)};},async run(){const result=sql.prepare(query).run(...params);return {meta:{last_row_id:Number(result.lastInsertRowid),changes:result.changes}};}});
  return {sql,prepare:wrap,async batch(statements){sql.exec('BEGIN');try{const results=[];for(const statement of statements)results.push(await statement.run());sql.exec('COMMIT');return results;}catch(error){sql.exec('ROLLBACK');throw error;}}};
 }
+test('production HTTP redirects to HTTPS before database access and rejects insecure writes',async()=>{
+ for(const method of ['GET','HEAD']) {
+  const response=await worker.fetch(new Request('http://bid.example.test/ui/login?from=wechat',{method}),{});
+  assert.equal(response.status,308);
+  assert.equal(response.headers.get('Location'),'https://bid.example.test/ui/login?from=wechat');
+  assert.equal(response.headers.get('Cache-Control'),'no-store');
+ }
+ const admin=await worker.fetch(new Request('http://bid.example.test/admin'),{});
+ assert.equal(admin.headers.get('Location'),'https://bid.example.test/admin');
+ const write=await worker.fetch(new Request('http://bid.example.test/ui/login',{method:'POST',headers:{Origin:'http://bid.example.test'},body:new URLSearchParams({username:'test'})}),{});
+ assert.equal(write.status,403);
+ assert.match((await write.json()).message,/HTTPS/);
+});
 test('validation rejects incorrect dates, amounts and statuses',()=>{
  const valid={name:'体检项目',customer:'测试单位',registration_time:'2026-10-01',bid_time:'2026-10-02'};
  assert.equal(validateBusiness(valid).service_people,0);

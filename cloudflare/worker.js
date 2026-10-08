@@ -73,6 +73,13 @@ async function stats(db) {
 }
 async function handle(request,env) {
  const url=new URL(request.url),path=url.pathname,db=env.DB;
+ // Web Crypto and secure session cookies require HTTPS in production.
+ // Keep loopback HTTP available for local Wrangler development and tests.
+ if(url.protocol==='http:'&&!['localhost','127.0.0.1','[::1]'].includes(url.hostname)) {
+  if(!['GET','HEAD'].includes(request.method))return json({message:'请使用HTTPS访问系统'},403);
+  url.protocol='https:';
+  return new Response(null,{status:308,headers:{Location:url.href,'Cache-Control':'no-store'}});
+ }
  if(request.method==='POST' && request.headers.get('Origin')!==url.origin) return json({message:'请求来源不合法'},403);
  if(Number(request.headers.get('Content-Length')||0)>1048576) return json({message:'请求内容过大'},413);
  if(path==='/api/auth/challenge') {

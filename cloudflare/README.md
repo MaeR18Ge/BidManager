@@ -1,6 +1,6 @@
 # Cloudflare 部署指南
 
-适用版本：**BidManager v2.0.0**。从项目根目录执行命令，以下示例使用 Windows PowerShell。
+适用版本：**BidManager v2.0.1**。从项目根目录执行命令，以下示例使用 Windows PowerShell。
 
 Workers 处理页面、身份验证和业务接口，D1 保存业务、变更历史、账户及会话；静态资源随 Worker 发布，PDF 在浏览器生成。线上无需 Flask、Python、Node PDF 服务、R2 或 Browser Run。
 
@@ -20,6 +20,8 @@ npm.cmd run dev:cloudflare
 ```
 
 本地管理页为 `http://127.0.0.1:8787/admin`，登录页为 `http://127.0.0.1:8787/ui/login`。本地和远程 D1 数据互相独立；`--local` 不会修改线上数据库。
+
+线上分享登录链接时使用完整的 HTTPS 地址。微信等内置浏览器通过 HTTP 打开时，可能不提供登录所需的 `crypto.subtle` 接口；当前 Worker 会将生产环境 HTTP 页面访问自动跳转到 HTTPS，并拒绝 HTTP 写请求。仍出现旧报错时关闭旧页面，重新打开完整 HTTPS 链接。自定义域名应同时记录在 `wrangler.jsonc` 的 `routes` 中，使用 `custom_domain: true`，保证后续发布沿用该域名。
 
 ## 首次上线
 
@@ -63,7 +65,7 @@ npx.cmd wrangler secret put ADMIN_SETUP_KEY
 - 如需演示数据，可由管理员导入 200 条；完成演示后可按来源清除。
 - 查看 Cloudflare 的实际 CPU、数据库读取量及错误指标，确认满足所选计划额度。
 
-本项目已通过本地测试及部署模拟；发布时尚未进行真实云端上线及免费计划 CPU 指标验证。
+v2.0.1 已通过 11 组本地测试、资源构建及部署模拟，并完成真实 Cloudflare 部署。线上 HTTP 跳转至 HTTPS 已验证，用户已确认新增、删除及微信 HTTPS 登录正常；免费计划 CPU 指标仍需在控制台观察。
 
 ## 日常更新
 

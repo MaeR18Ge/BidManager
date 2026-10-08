@@ -1,6 +1,6 @@
 # BidManager
 
-**投标管理系统 · v2.0.0 · 2026-10-08**
+**投标管理系统 · v2.0.1 · 2026-10-08**
 
 A bid management system for tracking projects, bidding schedules, tender documents, business changes, and PDF exports.
 
@@ -53,7 +53,7 @@ npm.cmd run dev:cloudflare
 
 按 [Cloudflare 部署指南](cloudflare/README.md)创建 D1、替换 `wrangler.jsonc` 的数据库占位 ID、应用远程迁移、部署并设置首个管理员。线上初始化需要 `ADMIN_SETUP_KEY`，本地账户和业务不会自动上传。
 
-代码已通过本地功能测试和部署模拟，尚未完成实际云端上线及免费计划 CPU 指标验证。
+v2.0.1 已部署到 Cloudflare，通过本地功能测试、部署模拟及线上 HTTP 跳转验证；用户已确认新增、删除及微信 HTTPS 登录正常。免费计划 CPU 指标仍需在控制台观察。
 
 ## 使用说明
 

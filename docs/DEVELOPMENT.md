@@ -1,6 +1,6 @@
 # 开发维护指南
 
-适用版本：v2.0.0。用户使用入口见 [README](../README.md)，线上配置与备份见 [Cloudflare 部署指南](../cloudflare/README.md)。
+适用版本：v2.0.1。用户使用入口见 [README](../README.md)，线上配置与备份见 [Cloudflare 部署指南](../cloudflare/README.md)。
 
 ## 代码结构
 
@@ -33,6 +33,8 @@ D1 保存五类数据：`business`、`status_history`、`app_user`、`session`�
 主界面使用 `bid_session`，管理页使用路径限定为 `/admin` 的 `bid_admin_session`。后端按页面选择对应会话，不相互回退。会话 24 小时过期，数据库只保存随机令牌的 SHA256 验证值；HTTPS 使用 Secure Cookie。角色、密码或启停状态变化撤销该账户所有旧会话。
 
 浏览器用 PBKDF2-SHA256、31 万次迭代产生登录凭据，服务器保存其 SHA256 验证值。该方案保留既有技术依赖；线上必须使用 HTTPS，登录需要 JavaScript。写请求校验 Origin，登录失败按账户和来源限流。
+
+生产环境 HTTP 的 GET/HEAD 请求在访问数据库前以 308 跳转到同路径、同查询参数的 HTTPS 地址，其他 HTTP 方法返回 403；localhost、127.0.0.1 和 IPv6 回环地址保留本地开发例外。微信等内置浏览器打开未带 HTTPS 的链接时也会先跳转，避免 `crypto.subtle.importKey` 不可用。登录页和管理页检查加密接口是否可用，缺少时显示操作提示。密码派生算法、账户数据和既有会话格式不变。
 
 头像压缩后存入 D1；未设置时动态生成文字头像，不写入账户记录。上传新头像才替换旧图片，普通登录不会清除原头像。
 
