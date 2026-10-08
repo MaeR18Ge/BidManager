@@ -1,75 +1,144 @@
-# BidManager v2.0.0 — Cloudflare 部署
+# Cloudflare 部署指南
 
-本目录提供独立的 JavaScript Workers 后端、D1 数据库、浏览器 PDF 导出。本地 Flask 入口继续保留，二者各自使用独立数据库，不会自动双向同步。
+适用版本：**BidManager v2.0.0**。从项目根目录执行命令，以下示例使用 Windows PowerShell。
 
-## 功能
+Workers 处理页面、身份验证和业务接口，D1 保存业务、变更历史、账户及会话；静态资源随 Worker 发布，PDF 在浏览器生成。线上无需 Flask、Python、Node PDF 服务、R2 或 Browser Run。
 
-- 保留业务列表、搜索、状态筛选、截止日排序、统计卡片、10/20/50 条分页、多选和取消选中。
-- 新增/查看/编辑业务、状态更新、完整变更记录；删除和导出仅管理员可用。
-- 登录会话保存在 D1，24 小时过期，退出或重置密码会使相应会话失效。
-- 不设默认管理员密码。浏览器使用 PBKDF2-SHA256（31万次）派生登录凭据，服务端保存其 SHA256 验证值，避免将耗时派生计算放在 Workers；登录需 JavaScript 和 HTTPS（localhost 本地验证除外）。另有登录限流、同源写请求检查和 HTML 转义。
-- 头像保存在 D1，限 PNG/JPEG/WebP、100KB，无需另开 R2 计费服务。
-- PDF 在用户浏览器生成，中文按图像嵌入，分页按实际行高分组，支持选中导出和确认全部导出；无需 Node PDF 服务和 Browser Run。
-- PDF 是 A4 横向业务列表，文字暂不支持搜索或复制，与旧版服务端 PDF 的版式有所不同。
-- 所需图标、Chart.js、Tailwind 和 PDF 依赖随静态资源发布，不依赖外部 CDN。
+## 本地准备
 
-## 本地验证（Node.js 22.18+、Python 3）
-
-在项目根目录执行。首次安装不需要下载 Chromium：
+安装 Node.js 22.18 或更新版本及 Git：
 
 ```powershell
+git clone https://github.com/MaeR18Ge/BidManager.git
+Set-Location BidManager
 $env:PUPPETEER_SKIP_DOWNLOAD = 'true'
 npm.cmd ci
 npm.cmd run build:cloudflare
 npx.cmd wrangler d1 migrations apply bidmanager --local
 npm.cmd run test:cloudflare
-```
-
-创建独立的云端管理员，旧版 Werkzeug 密码哈希不直接迁移：
-
-```powershell
-$env:BID_USERNAME = Read-Host '管理员用户名'
-$securePassword = Read-Host '管理员密码（至少12个字符）' -AsSecureString
-$env:BID_PASSWORD = [System.Net.NetworkCredential]::new('', $securePassword).Password
-node cloudflare/create-user.mjs
-Remove-Item Env:BID_PASSWORD
-npx.cmd wrangler d1 execute bidmanager --local --file=cloudflare/user.private.sql
-Remove-Item -LiteralPath cloudflare/user.private.sql
 npm.cmd run dev:cloudflare
 ```
 
-访问 http://localhost:8787/ui/login。运行测试会使用内存中的独立数据库，不改动本地业务库。
+本地管理页为 `http://127.0.0.1:8787/admin`，登录页为 `http://127.0.0.1:8787/ui/login`。本地和远程 D1 数据互相独立；`--local` 不会修改线上数据库。
 
-## 上线
+## 首次上线
 
-1. 注册并登录 Cloudflare，保持 Workers Free 计划。
-2. `npx.cmd wrangler login` 完成浏览器授权。
-3. `npx.cmd wrangler d1 create bidmanager`，将返回的数据库 ID 填入根目录 `wrangler.jsonc` 的 `database_id`；占位 ID 不能直接部署。
-4. `npx.cmd wrangler d1 migrations apply bidmanager --remote` 创建空数据库结构。
-5. 按上面的步骤重新生成管理员 SQL，改用 `npx.cmd wrangler d1 execute bidmanager --remote --file=cloudflare/user.private.sql`；完成后删除 SQL 文件和密码环境变量。
-6. 如需迁移旧数据，使用下一节；否则直接部署空业务库。
-7. `npm.cmd run deploy:cloudflare`，访问输出的 `workers.dev` 地址，无需购买域名。
+### 1. 登录并创建数据库
 
-无需配置付费 Workers、R2、Browser Run 或外部数据库。不要把密码、头像、SQL 数据导出提交到 GitHub。
-
-## 迁移现有业务
-
-导出工具以只读方式打开 SQLite，仅导出业务和变更记录，不导出账号密码。首次向空 D1 导入：
+保持 Workers Free 计划，在项目根目录执行：
 
 ```powershell
-python cloudflare/export-sqlite.py F:\AI\BusinessMT\instance\business_management.db
+npx.cmd wrangler login
+npx.cmd wrangler d1 create bidmanager
+```
+
+将创建结果中的真实 `database_id` 填入 `wrangler.jsonc`，替换全零占位值。保留数据库绑定名 `DB`、数据库名 `bidmanager` 和迁移目录 `cloudflare/migrations`。
+
+### 2. 应用迁移并部署
+
+```powershell
+npx.cmd wrangler d1 migrations apply bidmanager --remote
+npm.cmd run deploy:cloudflare
+```
+
+迁移依次创建业务、历史、账户及会话表，并增加测试业务来源标记。部署命令会先构建资源，再输出 `workers.dev` 地址，无需购买域名。
+
+### 3. 设置首个管理员
+
+先为已部署的 Worker 配置初始化密钥，按提示输入自行生成的随机密钥：
+
+```powershell
+npx.cmd wrangler secret put ADMIN_SETUP_KEY
+```
+
+访问部署地址的 `/admin`，输入初始化密钥，设置管理员用户名、密码及可选的普通用户。密码为 6 至 200 个字符。线上空库未配置密钥时不开放初始化；存在管理员后不允许重复初始化。
+
+初始化完成后管理页已登录，主界面仍需从 `/ui/login` 单独登录。两处登录和退出互不影响，普通用户不能登录管理页。没有来自业务页的管理入口。
+
+### 4. 验证线上功能
+
+- 分别登录普通用户和管理员，确认删除、PDF 导出和用户管理权限。
+- 检查新增、编辑、状态修改、搜索、分页、变更记录及统计。
+- 检查选中 PDF 和确认全部导出，以及两个标签页的独立登录与退出。
+- 如需演示数据，可由管理员导入 200 条；完成演示后可按来源清除。
+- 查看 Cloudflare 的实际 CPU、数据库读取量及错误指标，确认满足所选计划额度。
+
+本项目已通过本地测试及部署模拟；发布时尚未进行真实云端上线及免费计划 CPU 指标验证。
+
+## 日常更新
+
+从 GitHub 拉取新版本后，在项目根目录执行：
+
+```powershell
+git pull --ff-only
+npm.cmd ci
+npm.cmd run test:cloudflare
+npx.cmd wrangler d1 migrations apply bidmanager --remote
+npm.cmd run deploy:cloudflare
+```
+
+更新前先备份 D1，保留真实数据库 ID 和已有 Worker 密钥。迁移只增加结构，不清空业务；已有迁移不要改写。不要用本地数据库文件替换线上数据。
+
+## 用户与测试数据
+
+管理员可创建账户、调整角色、启停账户和重设密码。不能取消当前账户的管理员权限或停用当前账户；系统保留至少一名启用的管理员。角色、状态或密码变化会撤销该账户在主界面和管理页的旧会话。
+
+普通用户可查看、新增、编辑业务及修改状态，不能删除或导出 PDF；受限操作提示“当前用户不具有此权限”，后端同时拒绝请求。
+
+每次导入 200 条测试业务，支持重复导入。测试业务具有独立来源标记，编辑、重命名或状态修改都不改变标记；清除会删除所有已标记测试业务及其历史，保留手动录入的正式业务和既有未标记数据。不依据名称、备注或操作人判断来源。
+
+测试业务分布在近 12 个北京时间自然周，统计曲线有起伏且总体上升。录入早于报名，报名早于投标；已投标及结果状态使用已过去的投标日期，已报名及后续状态均已获取标书。既有业务会继续参与统计。
+
+## 迁移 Flask 旧业务
+
+需要 Python 3。先备份原 SQLite，把下面的数据库路径替换为实际路径，仅向空业务库执行一次导入：
+
+```powershell
+python cloudflare/export-sqlite.py .\instance\business_management.db
 npx.cmd wrangler d1 execute bidmanager --remote --file=cloudflare/business.private.sql
 Remove-Item -LiteralPath cloudflare/business.private.sql
 ```
 
-先将 `--remote` 改为 `--local` 可验证数据。不能重复向同一非空数据库导入，否则主键冲突；工具不会清空现有数据。工具会跳过旧库中已删除业务的孤立历史并报告数量，原 SQLite 不作改动。迁移后旧版账号需单独重建。先备份原 SQLite，再确定上线后的数据以哪一端为准。
+工具以只读方式打开 SQLite，只导出业务与有效历史，跳过已删除业务的孤立历史；不导出账户、密码或头像。旧账号需在新系统重新建立，旧密码哈希不直接迁移。重复向非空业务库导入会产生主键冲突。
 
-## 免费额度与验证边界
+可先将 `--remote` 改为 `--local` 验证导入结果。原 SQLite 与 D1 不自动双向同步，应确定上线后使用哪套数据。
 
-按当前官方政策：Workers 每日 10 万请求、每次 10ms CPU；D1 总存储5GB，每日读500万行、写10万行。D1 的读取按扫描行计费，需要定期关注用量。免费计划有额度限制，不能承诺永久不变或无条件可用。
+## 命令行管理员恢复
 
-本地验证不等于线上10ms CPU预算验证。首次上线后需核查登录校验、统计及大量业务导出的实际 CPU 指标；超限时需优化，不能静默升级付费计划。浏览器 PDF 的速度和文件大小受用户设备及导出条数影响。
+无法使用管理页时，可由拥有 Cloudflare 权限的维护者生成账户 SQL：
 
-相关文档：[Workers 免费额度](https://developers.cloudflare.com/workers/platform/pricing/)、[D1 额度](https://developers.cloudflare.com/d1/platform/pricing/)、[D1 数据备份](https://developers.cloudflare.com/d1/reference/time-travel/)。
+```powershell
+$env:BID_USERNAME = Read-Host '管理员用户名'
+$adminPassword = Read-Host '管理员密码（6至200个字符）' -AsSecureString
+$env:BID_PASSWORD = [System.Net.NetworkCredential]::new('', $adminPassword).Password
+$env:BID_ROLE = 'admin'
+node cloudflare/create-user.mjs
+Remove-Item Env:BID_PASSWORD
+npx.cmd wrangler d1 execute bidmanager --remote --file=cloudflare/user.private.sql
+Remove-Item -LiteralPath cloudflare/user.private.sql
+Remove-Item Env:BID_USERNAME, Env:BID_ROLE
+```
 
-上线后应验证登录、编辑、新增、删除、历史记录、统计、选中和全部 PDF、手机布局，并定期备份 D1 数据。
+若用户名已经存在，该工具会重设密码和角色、启用账户并撤销其旧会话。生成的 SQL 含密码验证值，不要提交或公开。对本地恢复时使用 `--local`。
+
+## 备份与恢复
+
+备份整个远程 D1：
+
+```powershell
+npx.cmd wrangler d1 export bidmanager --remote --output=cloudflare/backup.private.sql
+```
+
+备份包含正式业务、历史和账户信息，需存放到项目之外的安全位置；`cloudflare/*.private.sql` 已被 Git 忽略。恢复前先保留当前备份，并按 Cloudflare 的 [D1 备份与 Time Travel 指南](https://developers.cloudflare.com/d1/reference/time-travel/)操作，恢复后验证业务数量与登录。
+
+本地开发数据在 `.wrangler` 中。关闭开发服务后另行备份该目录；它不会随源码上传。Flask 数据库和上传头像另按 [旧版本地运行说明](../docs/LEGACY_FLASK.md)备份。
+
+## 免费计划与使用边界
+
+2026-10-08 核对官方文档，Workers Free 为每天 10 万次请求、每次 10ms CPU。参见 [Workers 定价](https://developers.cloudflare.com/workers/platform/pricing/)。
+
+D1 免费计划每天读取 500 万行、写入 10 万行，总存储 5GB；单库上限 500MB。读取按扫描行计算，搜索及统计需关注实际用量。参见 [D1 定价](https://developers.cloudflare.com/d1/platform/pricing/)与 [D1 限制](https://developers.cloudflare.com/d1/platform/limits/)。免费额度与政策可能调整，超出额度时操作可能失败。
+
+本地验证不能代替线上 CPU 测量。大量业务导出还受用户设备的内存与浏览器速度影响；单次选中导出最多 500 条，全部导出需确认。PDF 为图像式文档，文字暂不支持搜索和复制。
+
+统计曲线按录入时间、最后更新时间和当前投标状态汇总，后续编辑会影响时间段归属；它不是每次投标和中标事件的历史快照。

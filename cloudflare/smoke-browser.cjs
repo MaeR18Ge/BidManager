@@ -3,6 +3,8 @@ const puppeteer=require('puppeteer');
 const fs=require('node:fs/promises');
 const path=require('node:path');
 const assert=require('node:assert/strict');
+const username=process.env.BID_TEST_USERNAME,password=process.env.BID_TEST_PASSWORD;
+if(!username||!password)throw new Error('Set BID_TEST_USERNAME and BID_TEST_PASSWORD for the isolated test account.');
 (async()=>{
  const output=path.resolve(__dirname,'test-artifacts');await fs.mkdir(output,{recursive:true});
  const base=process.env.TEST_BASE_URL||'http://127.0.0.1:8788';
@@ -11,7 +13,7 @@ const assert=require('node:assert/strict');
  try {
   const page=await browser.newPage();await page.setViewport({width:1440,height:1000});
   const errors=[],remote=[];page.on('pageerror',error=>errors.push(error.message));page.on('request',req=>{if(!req.url().startsWith(base)&&!req.url().startsWith('data:'))remote.push(req.url())});
-  await page.goto(base+'/ui/login');await page.type('[name=username]','smoke');await page.type('[name=password]','Test-only-Password!');await Promise.all([page.waitForNavigation(),page.click('button')]);
+  await page.goto(base+'/ui/login');await page.type('[name=username]',username);await page.type('[name=password]',password);await Promise.all([page.waitForNavigation(),page.click('button')]);
   await page.waitForFunction(()=>document.querySelectorAll('#bidTableBody tr').length===10);
   await page.select('#pageSize','50');await page.waitForFunction(()=>document.querySelectorAll('#bidTableBody tr').length===50);
   await page.click('#bidTableBody tr');assert.equal(await page.$$eval('.row-selected',rows=>rows.length),1);
@@ -26,6 +28,7 @@ const assert=require('node:assert/strict');
   await page.setViewport({width:390,height:844});await page.screenshot({path:path.join(output,'mobile.png'),fullPage:false});
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
   assert.deepEqual(errors,[]);assert.deepEqual(remote,[]);
-  console.log(JSON.stringify({rows:196,selectedPdfPages:1,allPdfPages:pages,pdfBytes:all.length,pageErrors:errors,externalRequests:remote}));
+  const rowCount=await page.evaluate(async()=> (await (await fetch('/api/listing')).json()).total);
+  console.log(JSON.stringify({rows:rowCount,selectedPdfPages:1,allPdfPages:pages,pdfBytes:all.length,pageErrors:errors,externalRequests:remote}));
  }finally{await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1});

@@ -1,4 +1,7 @@
 import { loginPage, businessPage } from './pages.js';
+import { adminPage } from './admin-page.js';
+import { handleAdmin } from './admin.js';
+import { defaultAvatarURL } from './avatar.js';
 
 export const fields = ['name','customer','bid_contact_name','bid_contact_phone','customer_contact_name','customer_contact_phone','service_content','bid_amount','service_people','document_url','previous_suppliers','registration_time','bid_time','document_status','bid_status','priority','payment_status','notes'];
 const bidStatuses = ['未报名','已报名','未投标','已投标','未中标','已中标'];
@@ -25,9 +28,11 @@ async function verify(proof,stored) {
  for(let i=0;i<actual.length;i++) diff|=actual.charCodeAt(i)^(expected.charCodeAt(i)||0);
  return diff===0;
 }
-function sessionCookie(token,request,maxAge=86400) {
- return `bid_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${new URL(request.url).protocol==='https:'?'; Secure':''}`;
+function authCookie(name,path,token,request,maxAge=86400) {
+ return `${name}=${token}; Path=${path}; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${new URL(request.url).protocol==='https:'?'; Secure':''}`;
 }
+const sessionCookie=(...args)=>authCookie('bid_session','/',...args);
+const adminSessionCookie=(...args)=>authCookie('bid_admin_session','/admin',...args);
 export function validateBusiness(input) {
  const data=Object.fromEntries(fields.map(k=>[k,String(input[k]??'').trim()]));
  if(!data.name || !data.customer) throw new Error('业务名称和客户单位不能为空');
@@ -69,45 +74,53 @@ async function stats(db) {
 async function handle(request,env) {
  const url=new URL(request.url),path=url.pathname,db=env.DB;
  if(request.method==='POST' && request.headers.get('Origin')!==url.origin) return json({message:'请求来源不合法'},403);
- if(Number(request.headers.get('Content-Length')||0)>200000) return json({message:'请求内容过大'},413);
+ if(Number(request.headers.get('Content-Length')||0)>1048576) return json({message:'请求内容过大'},413);
  if(path==='/api/auth/challenge') {
   const username=(url.searchParams.get('username')||'').trim().slice(0,80);
   const user=await db.prepare('SELECT password_hash FROM app_user WHERE username=? AND is_active=1').bind(username).first();
   return json({salt:user?.password_hash.split('$')[2]||(await digest('bidmanager:'+username)).slice(0,32),iterations:310000});
  }
- if(path==='/ui/login'||path==='/login') {
-  if(request.method!=='POST') return html(loginPage());
+ if(path==='/ui/login'||path==='/login'||path==='/admin/login') {
+  const adminLogin=path==='/admin/login';
+  const renderLogin=message=>adminLogin?adminPage({mode:'login',error:message}):loginPage(message);
+  if(request.method!=='POST') return html(renderLogin());
   const form=await request.formData(),username=String(form.get('username')||'').trim().slice(0,80),proof=String(form.get('proof')||'');
   const key=await digest((request.headers.get('CF-Connecting-IP')||'local')+':'+username),now=Math.floor(Date.now()/1000);
   await db.prepare('INSERT INTO login_attempt(key,attempts,expires_at) VALUES (?,1,?) ON CONFLICT(key) DO UPDATE SET attempts=CASE WHEN expires_at<? THEN 1 ELSE attempts+1 END,expires_at=CASE WHEN expires_at<? THEN excluded.expires_at ELSE expires_at END').bind(key,now+900,now,now).run();
   const limit=await db.prepare('SELECT attempts FROM login_attempt WHERE key=?').bind(key).first();
-  if(limit.attempts>10) return html(loginPage('尝试过于频繁，请15分钟后重试'),429);
-  const user=await db.prepare('SELECT * FROM app_user WHERE username=? AND is_active=1').bind(username).first();
+  if(limit.attempts>10) return html(renderLogin('尝试过于频繁，请15分钟后重试'),429);
+  const user=await db.prepare('SELECT id,username,role,password_hash FROM app_user WHERE username=? AND is_active=1').bind(username).first();
   const stored=user?.password_hash||'client-pbkdf2-sha256$310000$00000000000000000000000000000000$0000000000000000000000000000000000000000000000000000000000000000';
   const valid=await verify(proof,stored);
-  if(!user||!valid) return html(loginPage('用户名或密码错误'),401);
+  if(!user||!valid) return html(renderLogin('用户名或密码错误'),401);
+  if(adminLogin&&user.role!=='admin')return html(renderLogin('仅管理员可以进入用户设置'),403);
   const token=hex(crypto.getRandomValues(new Uint8Array(32)));
   const statements=[db.prepare('INSERT INTO session VALUES (?,?,?)').bind(await digest(token),user.id,now+86400),db.prepare('DELETE FROM session WHERE expires_at<?').bind(now),db.prepare('DELETE FROM login_attempt WHERE key=? OR expires_at<?').bind(key,now)];
   const avatar=form.get('avatar');
   if(avatar && typeof avatar!=='string' && avatar.size>0) {
-   if(avatar.size>100000||!['image/png','image/jpeg','image/webp'].includes(avatar.type)) return html(loginPage('头像需为 PNG/JPEG/WebP，且小于100KB'),400);
-   const bytes=new Uint8Array(await avatar.arrayBuffer());let binary='';for(const b of bytes)binary+=String.fromCharCode(b);
-   statements.push(db.prepare('UPDATE app_user SET avatar_url=? WHERE id=?').bind(`data:${avatar.type};base64,${btoa(binary)}`,user.id));
+   if(avatar.size>524288||!['image/png','image/jpeg','image/webp'].includes(avatar.type)) return html(renderLogin('头像处理失败，请更换图片后重试'),400);
+   const bytes=new Uint8Array(await avatar.arrayBuffer()),chunks=[];
+   for(let i=0;i<bytes.length;i+=8192)chunks.push(String.fromCharCode(...bytes.subarray(i,i+8192)));
+   statements.push(db.prepare('UPDATE app_user SET avatar_url=? WHERE id=?').bind(`data:${avatar.type};base64,${btoa(chunks.join(''))}`,user.id));
   }
-  await db.batch(statements);return redirect('/ui/console',sessionCookie(token,request));
+  await db.batch(statements);return redirect(adminLogin?'/admin':'/ui/console',(adminLogin?adminSessionCookie:sessionCookie)(token,request));
  }
- const token=request.headers.get('Cookie')?.match(/(?:^|;\s*)bid_session=([a-f0-9]{64})(?:;|$)/)?.[1];
- const user=token?await db.prepare('SELECT app_user.* FROM session JOIN app_user ON app_user.id=session.user_id WHERE token_hash=? AND expires_at>? AND is_active=1').bind(await digest(token),Math.floor(Date.now()/1000)).first():null;
+ const adminRoute=path==='/admin'||path.startsWith('/admin/');
+ // Settings authentication must never replace or fall back to the business-page session.
+ const token=request.headers.get('Cookie')?.match(adminRoute?/(?:^|;\s*)bid_admin_session=([a-f0-9]{64})(?:;|$)/:/(?:^|;\s*)bid_session=([a-f0-9]{64})(?:;|$)/)?.[1];
+ const user=token?await db.prepare('SELECT app_user.id,app_user.username,app_user.role FROM session JOIN app_user ON app_user.id=session.user_id WHERE token_hash=? AND expires_at>? AND is_active=1').bind(await digest(token),Math.floor(Date.now()/1000)).first():null;
+ if(adminRoute)return handleAdmin(request,env,user,{digest,adminSessionCookie,sessionToken:token,fields});
  if(!user) return path.startsWith('/api/')?json({message:'请先登录'},401):redirect('/ui/login');
  if(path==='/logout'||path==='/ui/logout') {await db.prepare('DELETE FROM session WHERE token_hash=?').bind(await digest(token)).run();return redirect('/ui/login',sessionCookie('',request,0));}
  if(path==='/'||path==='/ui/console') return redirect('/static/figma/BDpage/order-management.html');
- if(path==='/api/user/avatar') return json({avatar_url:user.avatar_url||'/static/default-avatar.svg',username:user.username,role:user.role});
+ if(path==='/api/user/avatar') {const profile=await db.prepare('SELECT avatar_url FROM app_user WHERE id=?').bind(user.id).first();return json({avatar_url:profile?.avatar_url||defaultAvatarURL(user.username),username:user.username,role:user.role});}
  if(path==='/api/stats') return json(await stats(db));
  if(path==='/api/listing') {
   const size=[10,20,50].includes(Number(url.searchParams.get('per_page')))?Number(url.searchParams.get('per_page')):10;
   const page=Math.max(1,Math.min(100000,parseInt(url.searchParams.get('page'))||1)); const conditions=[],params=[];
   const search=url.searchParams.get('search')?.slice(0,200),status=url.searchParams.get('bid_status');
-  if(search){const keys=fields.filter(k=>!['bid_amount','service_people','registration_time','bid_time','document_url','previous_suppliers'].includes(k));conditions.push('('+keys.map(k=>`${k} LIKE ? ESCAPE '\\'`).join(' OR ')+')');params.push(...keys.map(()=>'%'+search.replace(/[\\%_]/g,'\\$&')+'%'));}
+  // D1 limits LIKE patterns to 50 bytes; literal substring search supports long Chinese names.
+  if(search){const keys=fields.filter(k=>!['bid_amount','service_people','registration_time','bid_time','document_url','previous_suppliers'].includes(k));conditions.push('('+keys.map(k=>`instr(lower(coalesce(${k},'')),lower(?))>0`).join(' OR ')+')');params.push(...keys.map(()=>search));}
   if(status){conditions.push(status==='已投标'?"bid_status IN ('已投标','未中标','已中标')":'bid_status=?');if(status!=='已投标')params.push(status);}
   const where=conditions.length?' WHERE '+conditions.join(' AND '):'';
   const total=(await db.prepare('SELECT count(*) n FROM business'+where).bind(...params).first()).n;
@@ -115,12 +128,12 @@ async function handle(request,env) {
   return json({page,per_page:size,total,items});
  }
  if(path==='/api/export_data') {
-  if(user.role!=='admin')return json({message:'无导出权限'},403);
+  if(user.role!=='admin')return json({message:'当前用户不具有此权限'},403);
   const raw=url.searchParams.get('ids');let ids=[];
   if(raw!==null){if(!/^[1-9]\d*(,[1-9]\d*)*$/.test(raw))return json({message:'业务编号不合法'},400);ids=[...new Set(raw.split(',').map(Number))];if(ids.length>500||ids.some(x=>!Number.isSafeInteger(x)))return json({message:'单次最多导出500条选中业务'},400);}
   const rows=(await db.prepare('SELECT * FROM business'+(ids.length?' WHERE id IN (SELECT value FROM json_each(?))':'')+' ORDER BY '+orderSQL(url.searchParams.get('sort'))).bind(...(ids.length?[JSON.stringify(ids)]:[])).all()).results;
   if(ids.length&&rows.length!==ids.length)return json({message:'部分选中业务已被删除，请刷新列表'},404);
-  return json({items:rows});
+  return json({items:rows,exporter:user.username});
  }
  const match=path.match(/^\/(?:ui\/)?business\/(\d+)(?:\/(detail|edit|delete))?$/),statusMatch=path.match(/^\/api\/business\/(\d+)\/status$/);
  if(match||statusMatch||path==='/ui/business/new'||path==='/business/new') {
@@ -133,7 +146,7 @@ async function handle(request,env) {
   }
   if(match?.[2]==='delete') {
    if(request.method!=='POST')return json({message:'仅支持POST'},405);
-   if(user.role!=='admin')return json({message:'无删除权限'},403);
+   if(user.role!=='admin')return json({message:'当前用户不具有此权限'},403);
    await db.prepare('DELETE FROM business WHERE id=?').bind(id).run();return json({success:true});
   }
   if(request.method==='POST') {

@@ -4,4 +4,5 @@ Werkzeug==2.3.7
 pdfkit==1.0.0
 reportlab==4.0.4
 requests==2.31.0 
-Flask-Login==0.6.3SQLAlchemy==2.0.44
+Flask-Login==0.6.3
+SQLAlchemy==2.0.44

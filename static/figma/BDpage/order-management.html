@@ -295,7 +295,10 @@
                     
                     <!-- 退出按钮：绝对定位在容器右边，默认隐藏，通过脚本控制显隐 -->
                     <a id="logoutBtn" href="/ui/logout" title="退出登录" aria-label="退出登录" class="absolute right-0 top-1/2 -translate-y-1/2 opacity-0 invisible pointer-events-none transition-all duration-200 text-text-secondary bg-[#242424] border border-dark-100 rounded-md h-[34px] w-[64px] flex items-center justify-center hover:text-danger hover:ring-1 hover:ring-primary">
-                        <i class="bi bi-x text-text-secondary text-[22px] sm:text-[26px] leading-none relative top-[1px]"></i>
+                        <svg class="w-3 h-3 sm:w-4 sm:h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M9 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4"/>
+                            <path d="m16 7 5 5-5 5M21 12H9"/>
+                        </svg>
                     </a>
                 </div>
                 </div>
@@ -727,6 +730,61 @@
             const prevBtn = document.getElementById('prevPage');
             const nextBtn = document.getElementById('nextPage');
             const pageNumbers = document.getElementById('pageNumbers');
+            let activeStatusDropdown = null;
+            let statusDropdownFrame = 0;
+
+            function closeStatusDropdown() {
+                if(activeStatusDropdown) activeStatusDropdown.panel.classList.add('hidden');
+                activeStatusDropdown = null;
+            }
+
+            function positionStatusDropdown() {
+                if(!activeStatusDropdown) return false;
+                const { button, panel } = activeStatusDropdown;
+                if(!button.isConnected || !panel.isConnected || panel.classList.contains('hidden')) {
+                    closeStatusDropdown();
+                    return false;
+                }
+                const rect = button.getBoundingClientRect();
+                const viewH = document.documentElement.clientHeight;
+                const viewW = document.documentElement.clientWidth;
+                if(rect.bottom <= 0 || rect.top >= viewH || rect.right <= 0 || rect.left >= viewW) {
+                    closeStatusDropdown();
+                    return false;
+                }
+                const gap = 6;
+                const margin = 8;
+                const width = Math.round(rect.width);
+                panel.style.width = panel.style.minWidth = panel.style.maxWidth = width + 'px';
+                panel.style.maxHeight = Math.max(0, viewH - margin * 2) + 'px';
+                panel.style.overflowY = 'auto';
+                const height = panel.offsetHeight;
+                const below = viewH - rect.bottom - margin;
+                const above = rect.top - margin;
+                const openUp = below < height + gap && above > below;
+                panel.style.maxHeight = Math.max(0, (openUp ? above : below) - gap) + 'px';
+                const actualHeight = panel.offsetHeight;
+                const top = openUp ? rect.top - actualHeight - gap : rect.bottom + gap;
+                panel.style.left = Math.max(margin, Math.min(rect.left, viewW - width - margin)) + 'px';
+                panel.style.top = Math.max(margin, Math.min(top, viewH - actualHeight - margin)) + 'px';
+                panel.style.transformOrigin = openUp ? 'bottom left' : 'top left';
+                activeStatusDropdown.openUp = openUp;
+                return true;
+            }
+
+            function scheduleStatusDropdownPosition() {
+                if(!activeStatusDropdown || statusDropdownFrame) return;
+                statusDropdownFrame = requestAnimationFrame(() => {
+                    statusDropdownFrame = 0;
+                    positionStatusDropdown();
+                });
+            }
+            // Capture also handles scrolling inside the table or another scroll container.
+            document.addEventListener('scroll', scheduleStatusDropdownPosition, { capture: true, passive: true });
+            window.addEventListener('resize', scheduleStatusDropdownPosition);
+            document.addEventListener('keydown', event => {
+                if(event.key === 'Escape') closeStatusDropdown();
+            });
             // 刷新按钮已移除
 
             const projects = [
@@ -1241,40 +1299,16 @@
                         const dd = wrapper.querySelector(`[data-dropdown="${type}"]`);
                         // 关闭其他下拉
                         document.querySelectorAll('[data-dropdown]').forEach(el=>{ if(el!==dd) el.classList.add('hidden'); });
-                        // 定位：默认向下；若接近表格底部则向上
-                        const rect = btn.getBoundingClientRect();
-                        const viewH = window.innerHeight || document.documentElement.clientHeight;
                         dd.classList.remove('hidden');
                         dd.classList.add('dropdown-panel');
                         dd.style.position = 'fixed';
+                        dd.style.transitionProperty = 'opacity, transform';
                         dd.style.opacity = '0';
-                        dd.style.transform = 'scale(0.98) translateY(4px)';
-                        // 使弹出框宽度与选框一致
-                        const w = Math.round(rect.width);
-                        dd.style.width = w + 'px';
-                        dd.style.minWidth = w + 'px';
-                        dd.style.maxWidth = w + 'px';
-                        // 先测量真实高度，避免贴合误差
-                        dd.style.visibility = 'hidden';
-                        const measured = dd.getBoundingClientRect().height || 160;
-                        dd.style.visibility = '';
-                        const spaceBelow = viewH - rect.bottom;
-                        const openUp = spaceBelow < measured + 8;
-                        const left = Math.round(rect.left);
-                        let top;
-                        if (openUp) {
-                            // 紧贴按钮上边缘
-                            top = Math.max(8, Math.round(rect.top) - measured - 6);
-                            dd.style.transform = 'scale(0.98) translateY(-4px)';
-                            dd.style.transformOrigin = 'bottom left';
-                        } else {
-                            top = Math.min(viewH - 8, Math.round(rect.bottom) + 6);
-                            dd.style.transformOrigin = 'top left';
-                        }
-                        dd.style.left = left + 'px';
-                        dd.style.top = top + 'px';
                         dd.style.bottom = 'auto';
                         dd.style.margin = '0';
+                        activeStatusDropdown = { button: btn, panel: dd };
+                        if(!positionStatusDropdown()) return;
+                        dd.style.transform = activeStatusDropdown.openUp ? 'scale(0.98) translateY(-4px)' : 'scale(0.98) translateY(4px)';
                         // 动效与 Filter by 选择框一致：轻微位移 + 渐入
                         requestAnimationFrame(()=>{
                             dd.style.opacity = '1';
@@ -1301,7 +1335,7 @@
                                     }
                                 }catch(e){ /* ignore */ }
                                 // 立即关闭下拉，等待后端保存后统一刷新，避免本地索引错位
-                                dd.classList.add('hidden');
+                                closeStatusDropdown();
                                 // 后端持久化
                                 try{
                                     // 优先使用按钮上的 data-id，避免索引错位
@@ -1384,6 +1418,7 @@
                     clearRowSelection();
                 }
                 document.querySelectorAll('[data-dropdown]').forEach(el=> el.classList.add('hidden'));
+                closeStatusDropdown();
             });
 
             prevBtn.addEventListener('click', ()=>{ if(currentPage>1){ currentPage--; fetchPage(currentPage, true);} });

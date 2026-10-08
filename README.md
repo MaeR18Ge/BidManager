@@ -1,85 +1,86 @@
 # BidManager
 
-当前版本：**v2.0.0**（2026-10-08）
+**投标管理系统 · v2.0.0 · 2026-10-08**
 
-新增 Cloudflare Workers + D1 部署方式和浏览器端 PDF 导出。保留原有 Flask 本地运行方式。
+A bid management system for tracking projects, bidding schedules, tender documents, business changes, and PDF exports.
 
-云端迁移、账号创建、免费额度及部署步骤见 [Cloudflare 部署指南](cloudflare/README.md)。此版本代码已具备部署配置，尚未完成实际云端上线验证。
+面向体检业务的投标管理系统，集中管理业务信息、报名与投标时间、标书状态、收款情况和变更记录。2.0 使用 **Cloudflare Workers + D1**，支持本地测试和云端部署；保留原 Flask 本地运行方式。
 
-## v2.0.0 更新
+## 主要功能
 
-- 增加 Workers 业务接口、D1 表结构和索引、业务数据只读导出工具。
-- 增加云端登录、会话、权限、业务编辑及变更记录。
-- PDF 改为浏览器生成，保留选中/全部导出规则，无需云端 Chromium。
-- 云端页面依赖随静态资源打包；支持本地 Workers 开发和测试。
+- 业务新增、查看、编辑；管理客户、联系人、服务内容、人数、金额、标书地址及收款情况。
+- 搜索、投标状态筛选、报名/投标时间排序，每页显示 10、20 或 50 条。
+- 截止日期提示与时间校验，报名时间必须早于投标时间。
+- 单选、Ctrl / Command 多选、Shift 区间选择，跨页保留选择。
+- 自动记录字段变更，保留修改前后内容、操作人、时间和变更说明。
+- 业务总数、已投标数、已中标数、中标金额及近 12 周统计曲线。
+- 管理员删除业务及导出 PDF：选中时导出所选业务，未选中时确认导出全部业务。
+- 独立管理员页面，支持账户创建、角色调整、启停及密码重设。
+- 管理员每次导入 200 条测试业务，并按来源一键清除；修改过的测试业务仍可清除，手动录入的正式业务保留。
 
-## 本地 Flask 版本使用说明
+## 账户与权限
 
-本地运行方式保留 v1.1.0 的功能，发布版本统一为 v2.0.0。
+**普通用户**可查看、新增、编辑业务及修改状态，不能删除业务或导出 PDF。点击受限操作时提示“当前用户不具有此权限”，后端同时校验权限。
 
-A web-based bid management system for tracking projects, bidding schedules, tender documents, payment status, and business statistics, with PDF export support.
+**管理员**拥有业务管理权限，并可在 `/admin` 管理用户和测试数据。项目不预置账户或密码，首次运行需设置首个管理员；创建密码为 6 至 200 个字符。
 
-面向体检业务的投标管理系统，支持业务录入、报名与投标时间跟踪、标书和投标状态管理、收款记录、变更历史、统计图表及 PDF 导出。
+主界面 `/ui/login` 与管理页 `/admin` 分别登录，登录或退出互不影响。已有页面不提供管理页入口，需要直接访问 `/admin`。角色、账户状态或密码变化后，该账户需要重新登录。
 
-## 功能
+未设置头像时，自动显示用户名的大写首字母或第一个中文字；已上传头像优先使用。
 
-- 业务新增、查看、编辑和管理员删除
-- 搜索、分页、每页 10 / 20 / 50 条切换、报名与投标日期排序、状态筛选
-- Ctrl / Command 点击追加或取消选择，Shift 点击选择当前页连续区间
-- 跨页保留选中业务，再次点击选中行或点击列表外空白处取消选择
-- 截止日期提示、业务变更历史
-- 业务总数、投标数、中标数、中标金额与趋势图
-- 选中业务时仅导出选中项；未选中时确认后导出全部业务，不受分页、搜索或筛选限制
-- 用户登录、管理员权限和命令行用户管理
-- 响应式界面、手机端统计四宫格、长名称省略显示
+## 本地运行 2.0
 
-## 技术栈
-
-Python / Flask / SQLAlchemy / SQLite；HTML / JavaScript / Tailwind CSS / Chart.js；Node.js / Express / Puppeteer。
-
-## v1.1.0 更新说明
-
-- 增加每页 10、20、50 条选择，以及多选和批量删除确认。
-- 修复未选中业务时查看和编辑默认打开第一条的问题；查看、编辑仅支持单选。
-- 统一查看、编辑、删除在未选中时的提示为“请先选择业务”。
-- 修复选中行被悬停颜色覆盖的问题，选中后立即显示黑色背景。
-- 执行业务操作后清除选择，翻页按业务 ID 保留选择，避免误选同一行位置的其他业务。
-- 导出按钮增加规则说明；未选中时显示居中确认窗，提供“放弃”和“执行”，支持 Esc 取消。
-- 页面内容最大宽度为 1440 CSS 像素；手机端统计块采用两列两行，长业务名称显示省略号并可悬停查看完整名称。
-- 统一深灰背景和柔和边框，缩短截止提示为“剩XX天”“今截止”。
-
-### 选择与导出
-
-普通点击选择一条业务，再次点击该条取消选择。Ctrl（macOS 使用 Command）点击可追加或取消选择；Shift 点击从当前页锚点到目标行选择连续区间，Ctrl + Shift 可追加该区间。翻页保留选择；点击列表外空白处清空选择。
-
-查看、编辑需要恰好选中一条业务；删除可操作多条业务并要求确认。PDF 导出可跨页导出所有选中业务；没有选择时，“执行”将导出整个数据库的业务，“放弃”或 Esc 不产生导出请求。
-
-## 本地启动（Windows PowerShell）
+需要 Node.js **22.18 或更新版本**。以下命令适用于 Windows PowerShell，在项目根目录执行：
 
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-npm install
-npm --prefix static/figma/BDpage install
-.\.venv\Scripts\python.exe manage_users.py add YOUR_USERNAME YOUR_PASSWORD --role admin
-$env:SECRET_KEY = 'replace-with-a-long-random-secret'
-.\.venv\Scripts\python.exe -m flask --app app run --host 127.0.0.1 --port 5000
+git clone https://github.com/MaeR18Ge/BidManager.git
+Set-Location BidManager
+$env:PUPPETEER_SKIP_DOWNLOAD = 'true'
+npm.cmd ci
+npm.cmd run build:cloudflare
+npx.cmd wrangler d1 migrations apply bidmanager --local
+npm.cmd run dev:cloudflare
 ```
 
-另开一个终端启动 PDF 服务：
+1. 访问 [本地管理页](http://127.0.0.1:8787/admin)，设置首个管理员及可选的普通用户。
+2. 访问 [本地登录页](http://127.0.0.1:8787/ui/login)，登录后管理业务。
 
-```powershell
-npm run start:pdf
-```
+2.0 的 PDF 在用户浏览器生成，本地运行无需 Python、Node PDF 服务或下载 Chromium。依赖安装及首次 Cloudflare 授权需要联网，页面依赖随构建产物发布。
 
-访问 http://127.0.0.1:5000/ui/login 。
+## 部署到 Cloudflare
 
-PDF 导出需要 3001 端口的 Node.js 服务。页面使用在线 Tailwind、Chart.js 和图标资源，需要联网加载。首次使用 Puppeteer 需要可用的 Chromium。
+部署使用 Workers 和 D1，可在免费计划额度内运行，无需 R2 或 Browser Run。
+
+按 [Cloudflare 部署指南](cloudflare/README.md)创建 D1、替换 `wrangler.jsonc` 的数据库占位 ID、应用远程迁移、部署并设置首个管理员。线上初始化需要 `ADMIN_SETUP_KEY`，本地账户和业务不会自动上传。
+
+代码已通过本地功能测试和部署模拟，尚未完成实际云端上线及免费计划 CPU 指标验证。
+
+## 使用说明
+
+普通点击选择一条业务，再次点击取消；Ctrl（macOS 使用 Command）点击追加或取消选择；Shift 点击选择当前页连续区间，Ctrl + Shift 追加区间。翻页保留所选业务，点击列表外空白处取消选择。
+
+查看和编辑需要恰好选择一条业务。管理员可以批量删除，操作前需要确认。选中业务时 PDF 仅导出所选项，单次最多 500 条；未选中时确认导出数据库全部业务，不受当前分页、搜索或筛选限制。
+
+PDF 使用 html2canvas + jsPDF，在浏览器生成 A4 竖向文档，包含导出人、日期、金额汇总及页码。中文以图像方式嵌入，文字暂不支持搜索或复制。
 
 ## 数据与备份
 
-SQLite 数据库在 `instance/business_management.db`。数据库、备份、上传头像、虚拟环境和 node_modules 不提交到 GitHub，需要另行备份。当前界面源文件为 `static/figma/BDpage/order-management.html`，作为普通项目文件保存。
+Cloudflare 版本使用 D1；本地开发数据保存在 `.wrangler` 目录。Flask 版本使用 `instance/business_management.db`，两套数据库互相独立，不自动同步。
 
-## 账户管理
+数据库、备份、上传头像、私有 SQL、密码、依赖目录及测试产物不会提交到 GitHub，需单独备份。迁移旧业务和 D1 备份步骤见部署指南。
 
-项目不预置管理员密码。使用 `manage_users.py` 创建账户、修改密码、设置角色及启停账户。部署时设置固定且随机的 `SECRET_KEY`；未设置时每次启动自动生成，重启会使旧会话失效。
+## 开发与文档
+
+```powershell
+npm.cmd run test:cloudflare
+npm.cmd run build:cloudflare
+npx.cmd wrangler deploy --dry-run
+```
+
+- [Cloudflare 部署、初始化、迁移及备份](cloudflare/README.md)
+- [开发维护指南与测试方法](docs/DEVELOPMENT.md)
+- [保留的 Flask 本地运行方式](docs/LEGACY_FLASK.md)
+- [版本更新记录](CHANGELOG.md)
+- [开发记录索引](cloudflare/DEVELOPMENT_LOG.md)
+
+核心技术：JavaScript、Cloudflare Workers、D1、HTML、Chart.js、html2canvas、jsPDF；旧版本地入口使用 Python、Flask、SQLAlchemy、SQLite 和 Puppeteer。

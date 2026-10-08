@@ -36,7 +36,7 @@ login_manager.login_view = 'login'
 login_manager.login_message = '请先登录'
 
 # Node.js PDF服务配置
-PDF_SERVICE_URL = 'http://localhost:3001/generate-pdf'
+PDF_SERVICE_URL = os.environ.get('PDF_SERVICE_URL', 'http://localhost:3001/generate-pdf')
 
 # 北京时间时区
 BEIJING_TZ = timezone(timedelta(hours=8))

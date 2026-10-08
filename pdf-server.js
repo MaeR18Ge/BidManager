@@ -4,7 +4,7 @@ const cors = require('cors');
 const path = require('path');
 
 const app = express();
-const PORT = 3001;
+const PORT = Number(process.env.PDF_SERVICE_PORT || 3001);
 
 // 中间件
 app.use(cors());
