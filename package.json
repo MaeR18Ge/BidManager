@@ -1,24 +1,35 @@
 {
   "name": "bidmanager",
   "private": true,
-  "version": "1.1.0",
+  "version": "2.0.0",
   "description": "BidManager bid management system: responsive UI and PDF export",
   "main": "pdf-server.js",
   "scripts": {
     "build:css": "npx tailwindcss -c tailwind.config.js -i ./static/tailwind/input.css -o ./static/tailwind/output.css --minify",
     "watch:css": "npx tailwindcss -c tailwind.config.js -i ./static/tailwind/input.css -o ./static/tailwind/output.css --watch",
     "start:pdf": "node pdf-server.js",
-    "dev:pdf": "nodemon pdf-server.js"
+    "dev:pdf": "nodemon pdf-server.js",
+    "build:cloudflare": "node cloudflare/build.mjs",
+    "dev:cloudflare": "npm run build:cloudflare && wrangler dev --port 8787",
+    "deploy:cloudflare": "npm run build:cloudflare && wrangler deploy",
+    "test:cloudflare": "node --test cloudflare/*.test.mjs"
   },
   "dependencies": {
+    "bootstrap-icons": "^1.13.1",
+    "chart.js": "^4.4.8",
     "cors": "^2.8.5",
     "express": "^4.18.2",
+    "font-awesome": "^4.7.0",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^4.2.1",
     "puppeteer": "^21.5.2"
   },
   "devDependencies": {
     "autoprefixer": "^10.4.20",
+    "esbuild": "^0.28.2",
     "nodemon": "^3.0.1",
     "postcss": "^8.4.41",
-    "tailwindcss": "^3.4.10"
+    "tailwindcss": "^3.4.10",
+    "wrangler": "^4.148.0"
   }
 }

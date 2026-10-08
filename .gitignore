@@ -101,6 +101,14 @@ htmlcov/
 # Additional Linux
 *~
 .fuse_hidden*
-.nfs* 
+.nfs*
 static/uploads/
 
+
+.wrangler/
+cloudflare/public/
+cloudflare/*.private.sql
+.dev.vars
+
+cloudflare/test-artifacts/
+.wrangler-config/

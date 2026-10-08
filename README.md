@@ -1,6 +1,21 @@
-﻿# BidManager · 投标管理
+# BidManager
 
-当前版本：**v1.1.0**（2026-10-08）
+当前版本：**v2.0.0**（2026-10-08）
+
+新增 Cloudflare Workers + D1 部署方式和浏览器端 PDF 导出。保留原有 Flask 本地运行方式。
+
+云端迁移、账号创建、免费额度及部署步骤见 [Cloudflare 部署指南](cloudflare/README.md)。此版本代码已具备部署配置，尚未完成实际云端上线验证。
+
+## v2.0.0 更新
+
+- 增加 Workers 业务接口、D1 表结构和索引、业务数据只读导出工具。
+- 增加云端登录、会话、权限、业务编辑及变更记录。
+- PDF 改为浏览器生成，保留选中/全部导出规则，无需云端 Chromium。
+- 云端页面依赖随静态资源打包；支持本地 Workers 开发和测试。
+
+## 本地 Flask 版本使用说明
+
+本地运行方式保留 v1.1.0 的功能，发布版本统一为 v2.0.0。
 
 A web-based bid management system for tracking projects, bidding schedules, tender documents, payment status, and business statistics, with PDF export support.
 
